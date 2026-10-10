@@ -14,10 +14,8 @@ class ExcelParseFacultyResult {
 }
 
 class ExcelService {
-  /// Parses the uploaded Faculty & Program Excel sheet.
-  /// Expects columns:
-  /// Program Name | Program Code | Faculty Name | Qualification | Approval
-  static ExcelParseFacultyResult parseFacultySheet(List<int> bytes) {
+  /// Parses uploaded Faculty & Program Excel sheet with optional forced department scoping.
+  static ExcelParseFacultyResult parseFacultySheet(List<int> bytes, {String? forcedDepartment}) {
     try {
       final excel = Excel.decodeBytes(bytes);
       final programsMap = <String, ProgramInfo>{};
@@ -27,7 +25,7 @@ class ExcelService {
         return ExcelParseFacultyResult(
           programs: [],
           faculties: [],
-          error: 'No sheets found in Excel file.',
+          error: 'No tables found in Excel workbook.',
         );
       }
 
@@ -36,55 +34,95 @@ class ExcelService {
         return ExcelParseFacultyResult(
           programs: [],
           faculties: [],
-          error: 'Sheet is empty.',
+          error: 'Uploaded worksheet is empty.',
         );
       }
 
-      // Find header indices
-      int colProgName = -1;
-      int colProgCode = -1;
-      int colFacName = -1;
-      int colQual = -1;
-      int colApproval = -1;
-
-      // Find header row (support title rows or blank top rows)
+      // 1. Scan first 10 rows to locate genuine header
       int headerRowIdx = 0;
-      for (var r = 0; r < sheet.rows.length && r < 5; r++) {
-        final rowStr = sheet.rows[r].map((c) => c?.value?.toString().trim().toLowerCase() ?? '').join(' ');
-        if (rowStr.contains('program') || rowStr.contains('faculty') || rowStr.contains('qual')) {
+      for (var r = 0; r < sheet.rows.length && r < 10; r++) {
+        final row = sheet.rows[r];
+        final rowStr = row.map((c) => c?.value?.toString().trim().toLowerCase() ?? '').join(' ');
+        final hasName = rowStr.contains('faculty') || rowStr.contains('staff') || rowStr.contains('teacher') || rowStr.contains('name');
+        final hasQual = rowStr.contains('qual') || rowStr.contains('degree') || rowStr.contains('designation');
+        final hasAppr = rowStr.contains('approv') || rowStr.contains('status') || rowStr.contains('regular');
+        final hasProg = rowStr.contains('program') || rowStr.contains('branch') || rowStr.contains('dept');
+        final hasSr = rowStr.contains('sr') || rowStr.contains('s.no');
+
+        var matchCount = 0;
+        if (hasName) matchCount += 2;
+        if (hasQual) matchCount++;
+        if (hasAppr) matchCount++;
+        if (hasProg) matchCount++;
+        if (hasSr) matchCount++;
+
+        if (matchCount >= 2) {
           headerRowIdx = r;
           break;
         }
       }
 
       final headerRow = sheet.rows[headerRowIdx];
+      int colSrNo = -1;
+      int colProgName = -1;
+      int colProgCode = -1;
+      int colFacName = -1;
+      int colQual = -1;
+      int colApproval = -1;
+
       for (var i = 0; i < headerRow.length; i++) {
         final val = headerRow[i]?.value?.toString().trim().toLowerCase() ?? '';
         if (val.isEmpty) continue;
 
-        if (val.contains('code') && (val.contains('program') || val.contains('prog') || val.contains('branch') || val.contains('dept') || val.contains('short') || val.contains('abbr'))) {
+        if (val == 'sr. no.' || val == 'sr.no' || val == 'sr no' || val == 's.no' || val == 's.no.' || val == 'sr' || val == 'no' || val == 'no.') {
+          colSrNo = i;
+        } else if (val.contains('code') && (val.contains('program') || val.contains('prog') || val.contains('branch') || val.contains('dept') || val.contains('short') || val.contains('abbr'))) {
           colProgCode = i;
-        } else if (val.contains('approv') || val.contains('status') || val.contains('designation') || val.contains('post')) {
-          // "Faculty Approved", "Approval Status", "Approved", etc. (MUST match before faculty name)
+        } else if (val.contains('approv') || val.contains('status') || val.contains('designation') || val.contains('post') || val.contains('nature')) {
           colApproval = i;
         } else if (val.contains('qual') || val.contains('degree') || val.contains('education')) {
           colQual = i;
-        } else if (val.contains('faculty') || val.contains('staff') || val.contains('teacher') || val.contains('instructor') || (val.contains('name') && !val.contains('program') && !val.contains('dept') && !val.contains('course'))) {
-          // "Faculty Name", "Name of Faculty", etc.
+        } else if (val.contains('faculty') || val.contains('staff') || val.contains('teacher') || val.contains('instructor') || (val.contains('name') && !val.contains('program') && !val.contains('dept') && !val.contains('branch') && !val.contains('institute'))) {
           colFacName = i;
         } else if (val.contains('program') || val.contains('branch') || val.contains('department') || val.contains('dept')) {
           colProgName = i;
         }
       }
 
-      // If any column was not resolved by keywords, use standard defaults
-      if (colProgName == -1) colProgName = 0;
-      if (colProgCode == -1) colProgCode = 1;
-      if (colFacName == -1) colFacName = 2;
-      if (colQual == -1) colQual = 3;
-      if (colApproval == -1) colApproval = 4;
+      // If colFacName not found by keywords, search first few data rows for person names
+      if (colFacName == -1) {
+        for (var r = headerRowIdx + 1; r < sheet.rows.length && r < headerRowIdx + 5; r++) {
+          final row = sheet.rows[r];
+          for (var i = 0; i < row.length; i++) {
+            if (i == colSrNo || i == colQual || i == colApproval || i == colProgCode || i == colProgName) continue;
+            final str = row[i]?.value?.toString().trim() ?? '';
+            if (str.startsWith('Prof.') || str.startsWith('Dr.') || str.startsWith('Mr.') || str.startsWith('Ms.') || str.split(' ').length >= 2) {
+              colFacName = i;
+              break;
+            }
+          }
+          if (colFacName != -1) break;
+        }
+      }
 
-      // Parse data rows starting after header row
+      if (colFacName == -1) {
+        for (var i = 0; i < headerRow.length; i++) {
+          if (i != colSrNo && i != colQual && i != colApproval) {
+            colFacName = i;
+            break;
+          }
+        }
+      }
+
+      final cleanDept = forcedDepartment != null && forcedDepartment.trim().isNotEmpty
+          ? forcedDepartment.trim().toUpperCase()
+          : null;
+
+      if (cleanDept != null) {
+        programsMap[cleanDept] = ProgramInfo(code: cleanDept, name: '$cleanDept Department');
+      }
+
+      // Parse data rows
       for (var r = headerRowIdx + 1; r < sheet.rows.length; r++) {
         final row = sheet.rows[r];
         if (row.isEmpty) continue;
@@ -94,31 +132,40 @@ class ExcelService {
           return row[idx]?.value?.toString().trim() ?? '';
         }
 
-        final pName = getCell(colProgName);
-        var pCode = getCell(colProgCode).toUpperCase();
-        final fName = getCell(colFacName);
-        final qual = getCell(colQual);
-        final appr = getCell(colApproval);
+        final fName = colFacName >= 0 ? getCell(colFacName) : '';
+        if (fName.isEmpty || fName.toLowerCase() == 'name of faculty' || fName.toLowerCase() == 'faculty name' || fName.toLowerCase() == 'name') {
+          continue;
+        }
 
-        if (fName.isEmpty && pName.isEmpty) continue;
+        var pName = colProgName >= 0 ? getCell(colProgName) : '';
+        var pCode = colProgCode >= 0 ? getCell(colProgCode).toUpperCase() : '';
+        final qual = colQual >= 0 ? getCell(colQual) : '';
+        final appr = colApproval >= 0 ? getCell(colApproval) : '';
 
-        // Auto-derive code if missing
-        if (pCode.isEmpty && pName.isNotEmpty) {
-          pCode = _deriveCode(pName);
+        if (cleanDept != null) {
+          pCode = cleanDept;
+          pName = pName.isNotEmpty ? pName : '$cleanDept Department';
+        } else {
+          if (pCode.isEmpty && pName.isNotEmpty) {
+            pCode = _deriveCode(pName);
+          }
+          if (pCode.isEmpty) {
+            pCode = 'CM';
+          }
         }
 
         if (pName.isNotEmpty && pCode.isNotEmpty) {
           programsMap[pCode] = ProgramInfo(code: pCode, name: pName);
+        } else if (pCode.isNotEmpty && !programsMap.containsKey(pCode)) {
+          programsMap[pCode] = ProgramInfo(code: pCode, name: '$pCode Department');
         }
 
-        if (fName.isNotEmpty) {
-          faculties.add(FacultyInfo(
-            name: fName,
-            programCode: pCode.isNotEmpty ? pCode : 'CM',
-            qualification: qual.isNotEmpty ? qual : 'B.E.',
-            approvalStatus: appr.isNotEmpty ? appr : 'Approved',
-          ));
-        }
+        faculties.add(FacultyInfo(
+          name: fName,
+          programCode: pCode,
+          qualification: qual.isNotEmpty ? qual : 'B.E.',
+          approvalStatus: appr.isNotEmpty ? appr : 'Approved',
+        ));
       }
 
       return ExcelParseFacultyResult(
@@ -134,10 +181,8 @@ class ExcelService {
     }
   }
 
-  /// Parses the uploaded Subjects / Curriculum Excel sheet.
-  /// Expects columns:
-  /// Program Code | Semester | Course Abbreviation and Code
-  static List<CourseInfo> parseSubjectSheet(List<int> bytes) {
+  /// Parses the uploaded Subjects / Curriculum Excel sheet with optional forced department scoping.
+  static List<CourseInfo> parseSubjectSheet(List<int> bytes, {String? forcedDepartment}) {
     try {
       final excel = Excel.decodeBytes(bytes);
       final courses = <CourseInfo>[];
@@ -156,9 +201,9 @@ class ExcelService {
 
       // Find header row
       int headerRowIdx = 0;
-      for (var r = 0; r < sheet.rows.length && r < 5; r++) {
+      for (var r = 0; r < sheet.rows.length && r < 10; r++) {
         final rowStr = sheet.rows[r].map((c) => c?.value?.toString().trim().toLowerCase() ?? '').join(' ');
-        if (rowStr.contains('sem') || rowStr.contains('course') || rowStr.contains('prog')) {
+        if (rowStr.contains('sem') || rowStr.contains('course') || rowStr.contains('subject')) {
           headerRowIdx = r;
           break;
         }
@@ -168,6 +213,10 @@ class ExcelService {
       for (var i = 0; i < headerRow.length; i++) {
         final val = headerRow[i]?.value?.toString().trim().toLowerCase() ?? '';
         if (val.isEmpty) continue;
+
+        if (val == 'sr. no.' || val == 'sr.no' || val == 'sr no' || val == 's.no' || val == 's.no.' || val == 'sr' || val == 'no') {
+          continue;
+        }
 
         final tokens = val.split(RegExp(r'[\s/._\-\(\)]+'));
 
@@ -186,12 +235,9 @@ class ExcelService {
         }
       }
 
-      if (colProgCode == -1) colProgCode = 0;
-      if (colSem == -1) colSem = 1;
-      if (colCourse == -1) colCourse = 2;
-      if (colTh == -1 && headerRow.length > 3) colTh = 3;
-      if (colPr == -1 && headerRow.length > 4) colPr = 4;
-      if (colTu == -1 && headerRow.length > 5) colTu = 5;
+      final cleanDept = forcedDepartment != null && forcedDepartment.trim().isNotEmpty
+          ? forcedDepartment.trim().toUpperCase()
+          : null;
 
       for (var r = headerRowIdx + 1; r < sheet.rows.length; r++) {
         final row = sheet.rows[r];
@@ -202,23 +248,25 @@ class ExcelService {
           return row[idx]?.value?.toString().trim() ?? '';
         }
 
-        var progCode = getCell(colProgCode).toUpperCase();
-        final semRaw = getCell(colSem);
-        final courseCode = getCell(colCourse);
+        final courseCode = colCourse >= 0 ? getCell(colCourse) : '';
+        if (courseCode.isEmpty || courseCode.toLowerCase() == 'course' || courseCode.toLowerCase() == 'subject') continue;
 
-        if (courseCode.isEmpty) continue;
+        var progCode = cleanDept ?? (colProgCode >= 0 ? getCell(colProgCode).toUpperCase() : '');
+        final semRaw = colSem >= 0 ? getCell(colSem) : '1';
 
         // Parse semester number (e.g. "1", "CM1", "Sem 3", "3K" -> 1, 3)
         final semMatch = RegExp(r'\d+').firstMatch(semRaw);
         final sem = semMatch != null ? int.tryParse(semMatch.group(0)!) ?? 1 : 1;
 
-        // If progCode was in sem (e.g. "CM1" and progCode empty)
-        if (progCode.isEmpty && semRaw.length >= 2) {
-          final letters = RegExp(r'[A-Za-z]+').firstMatch(semRaw)?.group(0);
-          if (letters != null) progCode = letters.toUpperCase();
+        if (progCode.isEmpty) {
+          if (semRaw.length >= 2) {
+            final letters = RegExp(r'[A-Za-z]+').firstMatch(semRaw)?.group(0);
+            if (letters != null) progCode = letters.toUpperCase();
+          }
         }
-
-        if (progCode.isEmpty) progCode = 'CM';
+        if (progCode.isEmpty) {
+          progCode = 'CM';
+        }
 
         String normalizeHrs(String raw, {String fallback = 'NA'}) {
           final t = raw.trim();

@@ -257,6 +257,7 @@ class MonitoringSubmission {
   final int weeksDoneYear3; // 3rd year (5th and 6th sem)
   final DateTime submittedAt;
   final List<MonitoringRowEntry> rows;
+  final String? submittedByName;
 
   MonitoringSubmission({
     required this.id,
@@ -270,6 +271,7 @@ class MonitoringSubmission {
     int? weeksDoneYear3,
     required this.submittedAt,
     required this.rows,
+    this.submittedByName,
   })  : weeksDone = weeksDone ?? 10,
         weeksDoneYear1 = weeksDoneYear1 ?? (weeksDone ?? 10),
         weeksDoneYear2 = weeksDoneYear2 ?? (weeksDone ?? 10),
@@ -294,10 +296,15 @@ class MonitoringSubmission {
         'weeksDoneYear3': weeksDoneYear3,
         'submittedAt': submittedAt.toIso8601String(),
         'rows': rows.map((r) => r.toJson()).toList(),
+        if (submittedByName != null) 'submittedByName': submittedByName,
       };
 
   factory MonitoringSubmission.fromJson(Map<String, dynamic> json) {
     final legacyWeeks = json['weeksDone'] as int? ?? 10;
+    final submittedByObj = json['submittedBy'] as Map<String, dynamic>?;
+    final submittedByName = submittedByObj?['fullName'] as String? ??
+        json['submittedByName'] as String?;
+
     return MonitoringSubmission(
       id: json['id'] as String,
       programName: json['programName'] as String,
@@ -309,10 +316,71 @@ class MonitoringSubmission {
       weeksDoneYear2: json['weeksDoneYear2'] as int? ?? legacyWeeks,
       weeksDoneYear3: json['weeksDoneYear3'] as int? ?? legacyWeeks,
       submittedAt: DateTime.parse(json['submittedAt'] as String),
-      rows: (json['rows'] as List<dynamic>)
-          .map((r) => MonitoringRowEntry.fromJson(r as Map<String, dynamic>))
-          .toList(),
+      rows: (json['rows'] as List<dynamic>?)
+              ?.map((r) =>
+                  MonitoringRowEntry.fromJson(r as Map<String, dynamic>))
+              .toList() ??
+          [],
+      submittedByName: submittedByName,
     );
   }
+}
+
+class AuthUser {
+  final String id;
+  final String email;
+  final String fullName;
+  final String role; // 'SUPER_ADMIN', 'ADMIN', or 'USER'
+  final String? department;
+  final String? profilePhotoUrl;
+
+  const AuthUser({
+    required this.id,
+    required this.email,
+    required this.fullName,
+    required this.role,
+    this.department,
+    this.profilePhotoUrl,
+  });
+
+  bool get isSuperAdmin => role.toUpperCase() == 'SUPER_ADMIN';
+  bool get isAdmin => role.toUpperCase() == 'ADMIN';
+  bool get isAdminOrSuper => isSuperAdmin || isAdmin;
+
+  factory AuthUser.fromJson(Map<String, dynamic> json) => AuthUser(
+        id: json['id'] as String? ?? '',
+        email: json['email'] as String? ?? '',
+        fullName: json['fullName'] as String? ?? '',
+        role: (json['role'] as String? ?? 'USER').toUpperCase(),
+        department: json['department'] as String?,
+        profilePhotoUrl: json['profilePhotoUrl'] as String?,
+      );
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'email': email,
+        'fullName': fullName,
+        'role': role,
+        'department': department,
+        'profilePhotoUrl': profilePhotoUrl,
+      };
+}
+
+class AuthTokens {
+  final String accessToken;
+  final String refreshToken;
+  final String expiresIn;
+
+  const AuthTokens({
+    required this.accessToken,
+    required this.refreshToken,
+    required this.expiresIn,
+  });
+
+  factory AuthTokens.fromJson(Map<String, dynamic> json) => AuthTokens(
+        accessToken: json['accessToken'] as String? ?? '',
+        refreshToken: json['refreshToken'] as String? ?? '',
+        expiresIn: json['expiresIn'] as String? ?? '15m',
+      );
 }
 

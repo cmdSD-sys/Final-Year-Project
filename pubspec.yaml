@@ -39,6 +39,8 @@ dependencies:
   file_picker: ^13.1.0
   path_provider: ^2.1.6
   intl: ^0.20.3
+  http: ^1.6.0
+  http_parser: ^4.1.2
 
 dev_dependencies:
   flutter_test:
@@ -66,6 +68,27 @@ flutter:
   assets:
     - format/Format.docx
     - assets/images/
+
+  # UI typography (SIL Open Font License, see assets/fonts/OFL-*.txt)
+  fonts:
+    - family: PublicSans
+      fonts:
+        - asset: assets/fonts/PublicSans-Regular.ttf
+        - asset: assets/fonts/PublicSans-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/PublicSans-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/PublicSans-Bold.ttf
+          weight: 700
+    - family: Newsreader
+      fonts:
+        - asset: assets/fonts/Newsreader-Regular.ttf
+        - asset: assets/fonts/Newsreader-Italic.ttf
+          style: italic
+        - asset: assets/fonts/Newsreader-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/Newsreader-SemiBold.ttf
+          weight: 600
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

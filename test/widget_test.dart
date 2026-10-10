@@ -8,9 +8,9 @@ void main() {
     final appState = AppState();
     await tester.pumpWidget(MyApp(appState: appState));
 
-    // Verify title and role selector
+    // Verify title and institutional login options
     expect(find.text('K K Wagh Polytechnic, Nashik'), findsOneWidget);
-    expect(find.text('Select Entry Role'), findsOneWidget);
-    expect(find.text('Enter Portal'), findsOneWidget);
+    expect(find.text('Super Admin (All Departments)'), findsOneWidget);
+    expect(find.text('CM Admin (Comp)'), findsOneWidget);
   });
 }

@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
+import '../services/app_state.dart';
+import '../theme/app_theme.dart';
 import '../utils/app_snack_bar.dart';
 
 class CreateUserDialog extends StatefulWidget {
-  const CreateUserDialog({super.key});
+  final AppState appState;
+
+  const CreateUserDialog({super.key, required this.appState});
 
   @override
   State<CreateUserDialog> createState() => _CreateUserDialogState();
@@ -16,9 +20,19 @@ class _CreateUserDialogState extends State<CreateUserDialog> {
   final _confirmPasswordController = TextEditingController();
 
   String _selectedAuthority = 'User'; // 'Admin' or 'User'
+  String _selectedDepartment = 'CM';
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
   bool _isCreating = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final dept = widget.appState.currentUserDepartment;
+    if (dept != null && dept.isNotEmpty) {
+      _selectedDepartment = dept;
+    }
+  }
 
   @override
   void dispose() {
@@ -33,58 +47,69 @@ class _CreateUserDialogState extends State<CreateUserDialog> {
     if (!_formKey.currentState!.validate()) return;
 
     setState(() => _isCreating = true);
-    await Future.delayed(const Duration(milliseconds: 600)); // Simulated processing
-    if (!mounted) return;
-    setState(() => _isCreating = false);
-
     final createdName = _nameController.text.trim();
+    final createdEmail = _emailController.text.trim();
+    final createdPassword = _passwordController.text;
     final createdAuthority = _selectedAuthority;
+    final createdDept = widget.appState.isSuperAdmin
+        ? _selectedDepartment
+        : (widget.appState.currentUserDepartment ?? _selectedDepartment);
 
-    Navigator.pop(context);
+    try {
+      if (widget.appState.isAuthenticated) {
+        await widget.appState.createUser(
+          fullName: createdName,
+          email: createdEmail,
+          password: createdPassword,
+          role: createdAuthority == 'Admin' ? 'ADMIN' : 'USER',
+          department: createdDept,
+        );
+      } else {
+        await Future.delayed(const Duration(milliseconds: 400));
+      }
 
-    AppSnackBar.showSuccess(
-      context,
-      'User "$createdName" created successfully as $createdAuthority!',
-    );
+      if (!mounted) return;
+      Navigator.pop(context);
+
+      AppSnackBar.showSuccess(
+        context,
+        'User "$createdName" ($createdAuthority, Dept: $createdDept) created successfully!',
+      );
+    } catch (e) {
+      if (!mounted) return;
+      AppSnackBar.showError(
+        context,
+        e.toString().replaceAll('ApiException: ', ''),
+      );
+    } finally {
+      if (mounted) setState(() => _isCreating = false);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final cardBg = isDark ? const Color(0xFF1E293B) : Colors.white;
-    final textColor = isDark ? Colors.white : const Color(0xFF0F172A);
-    final borderColor = isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1);
+    final cardBg = Pal.of(context).surface;
+    final textColor = Pal.of(context).ink;
+    final borderColor = Pal.of(context).rule;
 
     return AlertDialog(
       backgroundColor: cardBg,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(10),
         side: BorderSide(color: borderColor),
       ),
       title: Row(
         children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: isDark
-                  ? const Color(0xFF3B82F6).withValues(alpha: 0.2)
-                  : const Color(0xFFEFF6FF),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(
+          Icon(
               Icons.person_add_alt_1,
-              color: isDark ? const Color(0xFF60A5FA) : const Color(0xFF1E3A8A),
+              color: isDark ? const Color(0xFF5DB8DB) : const Color(0xFF0B6A90),
               size: 22,
             ),
-          ),
           const SizedBox(width: 12),
           Text(
             'Create New User',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: textColor,
-            ),
+            style: AppType.display(textColor, size: 22, height: 1.2),
           ),
         ],
       ),
@@ -101,7 +126,7 @@ class _CreateUserDialogState extends State<CreateUserDialog> {
                   'Set up credentials and authority level for a faculty member or administrator.',
                   style: TextStyle(
                     fontSize: 13,
-                    color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                    color: isDark ? const Color(0xFF8FA6AF) : const Color(0xFF5B6E76),
                   ),
                 ),
                 const SizedBox(height: 18),
@@ -112,7 +137,7 @@ class _CreateUserDialogState extends State<CreateUserDialog> {
                   decoration: InputDecoration(
                     labelText: 'Full Name *',
                     prefixIcon: const Icon(Icons.badge, size: 20),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(5)),
                   ),
                   validator: (v) {
                     if (v == null || v.trim().isEmpty) return 'Please enter user full name.';
@@ -128,7 +153,7 @@ class _CreateUserDialogState extends State<CreateUserDialog> {
                   decoration: InputDecoration(
                     labelText: 'Email Address *',
                     prefixIcon: const Icon(Icons.email, size: 20),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(5)),
                   ),
                   validator: (v) {
                     if (v == null || v.trim().isEmpty) return 'Please enter user email.';
@@ -149,7 +174,7 @@ class _CreateUserDialogState extends State<CreateUserDialog> {
                       icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility, size: 18),
                       onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
                     ),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(5)),
                   ),
                   validator: (v) {
                     if (v == null || v.isEmpty) return 'Please enter a password.';
@@ -170,7 +195,7 @@ class _CreateUserDialogState extends State<CreateUserDialog> {
                       icon: Icon(_obscureConfirmPassword ? Icons.visibility_off : Icons.visibility, size: 18),
                       onPressed: () => setState(() => _obscureConfirmPassword = !_obscureConfirmPassword),
                     ),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(5)),
                   ),
                   validator: (v) {
                     if (v == null || v.isEmpty) return 'Please confirm the password.';
@@ -178,9 +203,111 @@ class _CreateUserDialogState extends State<CreateUserDialog> {
                     return null;
                   },
                 ),
-                const SizedBox(height: 18),
+                const SizedBox(height: 14),
 
-                // 5. Authority Selection
+                // 5. Department Assignment
+                Text(
+                  'Assigned Department *',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: textColor,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                if (widget.appState.isSuperAdmin) ...[
+                  DropdownButtonFormField<String>(
+                    initialValue: _selectedDepartment,
+                    decoration: InputDecoration(
+                      prefixIcon: const Icon(Icons.domain, size: 20),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(5)),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    ),
+                    items: const [
+                      DropdownMenuItem(
+                        value: 'CM',
+                        child: Text('CM - Computer Technology'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'IT',
+                        child: Text('IT - Information Technology'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'ME',
+                        child: Text('ME - Mechanical Engineering'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'CE',
+                        child: Text('CE - Civil Engineering'),
+                      ),
+                    ],
+                    onChanged: (val) {
+                      if (val != null) setState(() => _selectedDepartment = val);
+                    },
+                  ),
+                ] else ...[
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: isDark ? const Color(0xFF0E222A) : const Color(0xFFE9EFF1),
+                      borderRadius: BorderRadius.circular(5),
+                      border: Border.all(color: borderColor),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.lock_outline,
+                          size: 20,
+                          color: isDark ? const Color(0xFF8FA6AF) : const Color(0xFF5B6E76),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                '${widget.appState.currentUserDepartment ?? 'CM'} Department',
+                                style: TextStyle(
+                                  fontSize: 13.5,
+                                  fontWeight: FontWeight.bold,
+                                  color: textColor,
+                                ),
+                              ),
+                              Text(
+                                'Locked to your department for data isolation',
+                                style: TextStyle(
+                                  fontSize: 11.5,
+                                  color: isDark ? const Color(0xFF8FA6AF) : const Color(0xFF5B6E76),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF1281B0).withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(
+                              color: const Color(0xFF1281B0).withValues(alpha: 0.3),
+                            ),
+                          ),
+                          child: Text(
+                            widget.appState.currentUserDepartment ?? 'CM',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF1281B0),
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 14),
+
+                // 6. Authority Selection
                 Text(
                   'Authority Level *',
                   style: TextStyle(
@@ -195,17 +322,17 @@ class _CreateUserDialogState extends State<CreateUserDialog> {
                     Expanded(
                       child: InkWell(
                         onTap: () => setState(() => _selectedAuthority = 'User'),
-                        borderRadius: BorderRadius.circular(10),
+                        borderRadius: BorderRadius.circular(5),
                         child: Container(
                           padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 6),
                           decoration: BoxDecoration(
                             color: _selectedAuthority == 'User'
-                                ? (isDark ? const Color(0xFF1E3A8A).withValues(alpha: 0.5) : const Color(0xFFEFF6FF))
+                                ? (isDark ? const Color(0xFF0B6A90).withValues(alpha: 0.5) : const Color(0xFFE3F0F5))
                                 : Colors.transparent,
-                            borderRadius: BorderRadius.circular(10),
+                            borderRadius: BorderRadius.circular(5),
                             border: Border.all(
                               color: _selectedAuthority == 'User'
-                                  ? const Color(0xFF2563EB)
+                                  ? const Color(0xFF1281B0)
                                   : borderColor,
                               width: _selectedAuthority == 'User' ? 2 : 1,
                             ),
@@ -218,8 +345,8 @@ class _CreateUserDialogState extends State<CreateUserDialog> {
                                 Icons.person,
                                 size: 18,
                                 color: _selectedAuthority == 'User'
-                                    ? const Color(0xFF2563EB)
-                                    : (isDark ? Colors.grey : Colors.grey.shade600),
+                                    ? const Color(0xFF1281B0)
+                                    : (isDark ? Color(0xFF74868D) : Color(0xFF5B6E76)),
                               ),
                               const SizedBox(width: 6),
                               Flexible(
@@ -229,7 +356,7 @@ class _CreateUserDialogState extends State<CreateUserDialog> {
                                   style: TextStyle(
                                     fontWeight: _selectedAuthority == 'User' ? FontWeight.bold : FontWeight.normal,
                                     color: _selectedAuthority == 'User'
-                                        ? (isDark ? Colors.white : const Color(0xFF1E3A8A))
+                                        ? (isDark ? Colors.white : const Color(0xFF0B6A90))
                                         : textColor,
                                     fontSize: 13,
                                   ),
@@ -244,17 +371,17 @@ class _CreateUserDialogState extends State<CreateUserDialog> {
                     Expanded(
                       child: InkWell(
                         onTap: () => setState(() => _selectedAuthority = 'Admin'),
-                        borderRadius: BorderRadius.circular(10),
+                        borderRadius: BorderRadius.circular(5),
                         child: Container(
                           padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 6),
                           decoration: BoxDecoration(
                             color: _selectedAuthority == 'Admin'
-                                ? (isDark ? Colors.amber.shade900.withValues(alpha: 0.3) : const Color(0xFFFEF3C7))
+                                ? (isDark ? Color(0xFF5C3300).withValues(alpha: 0.3) : const Color(0xFFFBF1DF))
                                 : Colors.transparent,
-                            borderRadius: BorderRadius.circular(10),
+                            borderRadius: BorderRadius.circular(5),
                             border: Border.all(
                               color: _selectedAuthority == 'Admin'
-                                  ? const Color(0xFFD97706)
+                                  ? const Color(0xFF9A5B00)
                                   : borderColor,
                               width: _selectedAuthority == 'Admin' ? 2 : 1,
                             ),
@@ -267,8 +394,8 @@ class _CreateUserDialogState extends State<CreateUserDialog> {
                                 Icons.security,
                                 size: 18,
                                 color: _selectedAuthority == 'Admin'
-                                    ? const Color(0xFFD97706)
-                                    : (isDark ? Colors.grey : Colors.grey.shade600),
+                                    ? const Color(0xFF9A5B00)
+                                    : (isDark ? Color(0xFF74868D) : Color(0xFF5B6E76)),
                               ),
                               const SizedBox(width: 6),
                               Flexible(
@@ -278,7 +405,7 @@ class _CreateUserDialogState extends State<CreateUserDialog> {
                                   style: TextStyle(
                                     fontWeight: _selectedAuthority == 'Admin' ? FontWeight.bold : FontWeight.normal,
                                     color: _selectedAuthority == 'Admin'
-                                        ? (isDark ? Colors.amber : const Color(0xFFB45309))
+                                        ? (isDark ? Color(0xFFC98A1E) : const Color(0xFF8A4F00))
                                         : textColor,
                                     fontSize: 13,
                                   ),
@@ -301,15 +428,15 @@ class _CreateUserDialogState extends State<CreateUserDialog> {
           onPressed: _isCreating ? null : () => Navigator.pop(context),
           child: Text(
             'Cancel',
-            style: TextStyle(color: isDark ? const Color(0xFF94A3B8) : Colors.grey.shade700),
+            style: TextStyle(color: isDark ? const Color(0xFF8FA6AF) : Color(0xFF44575F)),
           ),
         ),
         ElevatedButton.icon(
           style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFF1E3A8A),
+            backgroundColor: const Color(0xFF0B6A90),
             foregroundColor: Colors.white,
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(5)),
           ),
           onPressed: _isCreating ? null : _handleCreateUser,
           icon: _isCreating

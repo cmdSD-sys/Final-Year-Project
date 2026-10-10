@@ -1,313 +1,329 @@
 import 'package:flutter/material.dart';
 import '../services/app_state.dart';
 import '../screens/role_selection_screen.dart';
+import '../theme/app_theme.dart';
 import 'create_user_dialog.dart';
 import 'excel_upload_dialog.dart';
+import 'portal_ui.dart';
+import 'palette_switcher_dialog.dart';
 import 'settings_dialog.dart';
+import 'super_admin_user_dialog.dart';
 
 class AppNavigationDrawer extends StatelessWidget {
   final AppState appState;
   final VoidCallback? onOpenCatalog;
 
+  /// When true the navigation is rendered as a permanent sidebar (wide
+  /// screens) instead of a slide-over drawer, so items must not pop the route.
+  final bool persistent;
+
   const AppNavigationDrawer({
     super.key,
     required this.appState,
     this.onOpenCatalog,
+    this.persistent = false,
   });
+
+  void _dismiss(BuildContext context) {
+    if (!persistent) {
+      Navigator.pop(context);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-    final isAdmin = appState.currentRole == AppRole.admin;
-    final drawerBg = isDark ? const Color(0xFF0F172A) : Colors.white;
-    final borderColor = isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0);
-    final textColor = isDark ? Colors.white : const Color(0xFF0F172A);
+    final p = Pal.of(context);
+    final isSuperAdmin = appState.isSuperAdmin;
+    final isAdmin = appState.isAdminOrSuper;
+    final userDept = appState.currentUserDepartment;
+
+    String authorityLabel;
+    if (isSuperAdmin) {
+      authorityLabel = 'Authority: Super Admin';
+    } else if (isAdmin) {
+      authorityLabel = userDept != null ? 'Authority: Admin ($userDept)' : 'Authority: Admin';
+    } else {
+      authorityLabel = userDept != null ? 'Authority: User ($userDept)' : 'Authority: User';
+    }
+
+    final onGround = Colors.white;
+    final onGroundSoft = Colors.white.withValues(alpha: 0.62);
+    final hairline = Colors.white.withValues(alpha: 0.14);
+
+    Widget navTile({
+      required IconData icon,
+      required String title,
+      required String subtitle,
+      required VoidCallback onTap,
+    }) {
+      return ListTile(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+        hoverColor: Colors.white.withValues(alpha: 0.08),
+        splashColor: Colors.white.withValues(alpha: 0.10),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+        horizontalTitleGap: 12,
+        minLeadingWidth: 24,
+        leading: Icon(icon, color: onGround.withValues(alpha: 0.85), size: 22),
+        title: Text(
+          title,
+          style: TextStyle(
+            fontWeight: FontWeight.w600,
+            fontSize: 14,
+            color: onGround,
+          ),
+        ),
+        subtitle: Text(
+          subtitle,
+          style: TextStyle(fontSize: 12, color: onGroundSoft),
+        ),
+        onTap: onTap,
+      );
+    }
+
+    Widget sectionLabel(String text) {
+      return Padding(
+        padding: const EdgeInsets.only(left: 12, bottom: 6),
+        child: Text(
+          text,
+          style: TextStyle(
+            fontSize: 12.5,
+            fontWeight: FontWeight.w600,
+            color: onGroundSoft,
+          ),
+        ),
+      );
+    }
 
     return Drawer(
-      backgroundColor: drawerBg,
-      child: Column(
-        children: [
-          // 1. Profile Sidebar Header
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.fromLTRB(20, 50, 20, 24),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: isDark
-                    ? [const Color(0xFF1E293B), const Color(0xFF0F172A)]
-                    : [const Color(0xFF1E3A8A), const Color(0xFF2563EB)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.1),
-                  blurRadius: 8,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                // Profile Picture Circle
-                Container(
-                  padding: const EdgeInsets.all(3),
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(color: Colors.white.withValues(alpha: 0.8), width: 2),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.2),
-                        blurRadius: 8,
-                        offset: const Offset(0, 3),
-                      ),
-                    ],
+      backgroundColor: p.brandDeep,
+      surfaceTintColor: Colors.transparent,
+      elevation: persistent ? 0 : 16,
+      width: persistent ? 288 : null,
+      child: SafeArea(
+        child: Column(
+          children: [
+            // 1. Brand
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 24, 24, 20),
+              child: Row(
+                children: [
+                  const PortalLogo(
+                    height: 44,
+                    tint: Colors.white,
+                    asset: 'assets/images/nobgkkwpblack.png',
                   ),
-                  child: CircleAvatar(
-                    radius: 36,
-                    backgroundColor: isDark ? const Color(0xFF334155) : const Color(0xFFEFF6FF),
-                    backgroundImage: appState.currentUserPfpBytes != null
-                        ? MemoryImage(appState.currentUserPfpBytes!)
-                        : null,
-                    child: appState.currentUserPfpBytes == null
-                        ? Icon(
-                            isAdmin ? Icons.admin_panel_settings : Icons.person,
-                            size: 40,
-                            color: isAdmin
-                                ? const Color(0xFFD97706)
-                                : const Color(0xFF1E3A8A),
-                          )
-                        : null,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                // User Name
-                Text(
-                  appState.currentUserName,
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                    letterSpacing: 0.3,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                // Small Authority indicator
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: isAdmin
-                        ? Colors.amber.shade400.withValues(alpha: 0.2)
-                        : Colors.white.withValues(alpha: 0.2),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                      color: isAdmin
-                          ? Colors.amber.shade300.withValues(alpha: 0.6)
-                          : Colors.white.withValues(alpha: 0.4),
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        isAdmin ? Icons.verified_user : Icons.school,
-                        size: 13,
-                        color: Colors.white,
-                      ),
-                      const SizedBox(width: 5),
-                      Text(
-                        isAdmin ? 'Authority: Admin' : 'Authority: User',
-                        style: const TextStyle(
-                          fontSize: 11.5,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          // 2. Navigation Items
-          Expanded(
-            child: ListView(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
-              children: [
-                if (isAdmin) ...[
-                  // Section Title: Admin Management
-                  Padding(
-                    padding: const EdgeInsets.only(left: 12, bottom: 8),
+                  const SizedBox(width: 12),
+                  Expanded(
                     child: Text(
-                      'ADMINISTRATION',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 1.1,
-                        color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
-                      ),
+                      'K.K. Wagh Polytechnic, Nashik',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppType.display(onGround, size: 18, height: 1.2),
                     ),
                   ),
-
-                  // Upload Excel Sheets (Admin Only)
-                  ListTile(
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                    leading: const Icon(Icons.upload_file, color: Color(0xFF2563EB)),
-                    title: Text(
-                      'Upload Excel Sheets',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 14,
-                        color: textColor,
-                      ),
-                    ),
-                    subtitle: Text(
-                      'Faculty & Curriculum master sheets',
-                      style: TextStyle(fontSize: 12, color: isDark ? const Color(0xFF94A3B8) : Colors.grey.shade600),
-                    ),
-                    onTap: () {
-                      Navigator.pop(context);
-                      showDialog(
-                        context: context,
-                        builder: (_) => ExcelUploadDialog(
-                          appState: appState,
-                          onViewCatalog: onOpenCatalog ?? () {},
-                        ),
-                      );
-                    },
-                  ),
-
-                  // Create User (Admin Only)
-                  ListTile(
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                    leading: const Icon(Icons.person_add, color: Color(0xFF059669)),
-                    title: Text(
-                      'Create User',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 14,
-                        color: textColor,
-                      ),
-                    ),
-                    subtitle: Text(
-                      'Add new faculty or admin account',
-                      style: TextStyle(fontSize: 12, color: isDark ? const Color(0xFF94A3B8) : Colors.grey.shade600),
-                    ),
-                    onTap: () {
-                      Navigator.pop(context);
-                      showDialog(
-                        context: context,
-                        builder: (_) => const CreateUserDialog(),
-                      );
-                    },
-                  ),
-
-                  const SizedBox(height: 12),
-                  Divider(color: borderColor),
-                  const SizedBox(height: 8),
                 ],
+              ),
+            ),
+            Divider(height: 1, color: hairline),
 
-                // General Section
-                Padding(
-                  padding: const EdgeInsets.only(left: 12, bottom: 8),
-                  child: Text(
-                    'CURRICULUM & SYSTEM',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 1.1,
-                      color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
-                    ),
-                  ),
-                ),
-
-                // Active Catalog Option
-                if (onOpenCatalog != null)
-                  ListTile(
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                    leading: const Icon(Icons.menu_book, color: Color(0xFF0D9488)),
-                    title: Text(
-                      'Active Catalog',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 14,
-                        color: textColor,
+            // 2. Profile
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 20, 24, 20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(2),
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.white.withValues(alpha: 0.35)),
+                        ),
+                        child: CircleAvatar(
+                          radius: 22,
+                          backgroundColor: Colors.white.withValues(alpha: 0.14),
+                          backgroundImage: appState.currentUserPfpBytes != null
+                              ? MemoryImage(appState.currentUserPfpBytes!)
+                              : null,
+                          child: appState.currentUserPfpBytes == null
+                              ? Icon(
+                                  isSuperAdmin
+                                      ? Icons.verified_user
+                                      : (isAdmin ? Icons.admin_panel_settings : Icons.person),
+                                  size: 24,
+                                  color: onGround,
+                                )
+                              : null,
+                        ),
                       ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              appState.currentUserName,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600,
+                                color: onGround,
+                              ),
+                            ),
+                            if (appState.currentUser != null)
+                              Text(
+                                appState.currentUser!.email,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(fontSize: 12, color: onGroundSoft),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  PortalTag(
+                    icon: isSuperAdmin
+                        ? Icons.stars
+                        : (isAdmin ? Icons.verified_user : Icons.school),
+                    color: Colors.white,
+                    fill: Colors.white.withValues(alpha: 0.12),
+                    border: Colors.white.withValues(alpha: 0.28),
+                    label: authorityLabel,
+                  ),
+                ],
+              ),
+            ),
+            Divider(height: 1, color: hairline),
+
+            // 3. Navigation items
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 20),
+                children: [
+                  if (isSuperAdmin) ...[
+                    sectionLabel('Super admin options'),
+                    navTile(
+                      icon: Icons.manage_accounts,
+                      title: 'User Authority & Roles',
+                      subtitle: 'View all users, search & promote/demote',
+                      onTap: () {
+                        _dismiss(context);
+                        showDialog(
+                          context: context,
+                          builder: (_) => SuperAdminUserDialog(appState: appState),
+                        );
+                      },
                     ),
-                    subtitle: Text(
-                      'Faculty by dept & subject semesters',
-                      style: TextStyle(fontSize: 12, color: isDark ? const Color(0xFF94A3B8) : Colors.grey.shade600),
+                    const SizedBox(height: 12),
+                    Divider(height: 1, color: hairline),
+                    const SizedBox(height: 16),
+                  ],
+
+                  if (isAdmin) ...[
+                    sectionLabel('Administration'),
+                    navTile(
+                      icon: Icons.upload_file,
+                      title: 'Upload Excel Sheets',
+                      subtitle: 'Faculty & Curriculum master sheets',
+                      onTap: () {
+                        _dismiss(context);
+                        showDialog(
+                          context: context,
+                          builder: (_) => ExcelUploadDialog(
+                            appState: appState,
+                            onViewCatalog: onOpenCatalog ?? () {},
+                          ),
+                        );
+                      },
                     ),
+                    navTile(
+                      icon: Icons.person_add,
+                      title: 'Create User',
+                      subtitle: 'Add new faculty or admin account',
+                      onTap: () {
+                        _dismiss(context);
+                        showDialog(
+                          context: context,
+                          builder: (_) => CreateUserDialog(appState: appState),
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    Divider(height: 1, color: hairline),
+                    const SizedBox(height: 16),
+                  ],
+
+                  sectionLabel('Curriculum & system'),
+                  if (onOpenCatalog != null)
+                    navTile(
+                      icon: Icons.menu_book,
+                      title: 'Active Catalog',
+                      subtitle: 'Faculty by dept & subject semesters',
+                      onTap: () {
+                        _dismiss(context);
+                        onOpenCatalog!();
+                      },
+                    ),
+                  navTile(
+                    icon: Icons.palette_outlined,
+                    title: 'Theme & Color Palette',
+                    subtitle: 'Choose from 6 college color schemes',
                     onTap: () {
-                      Navigator.pop(context);
-                      onOpenCatalog!();
+                      _dismiss(context);
+                      PaletteSwitcherDialog.show(context, appState);
                     },
                   ),
+                  navTile(
+                    icon: Icons.settings,
+                    title: 'Settings',
+                    subtitle: 'Theme mode and system preferences',
+                    onTap: () {
+                      _dismiss(context);
+                      showDialog(
+                        context: context,
+                        builder: (_) => SettingsDialog(appState: appState),
+                      );
+                    },
+                  ),
+                ],
+              ),
+            ),
 
-                // Settings
-                ListTile(
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  leading: const Icon(Icons.settings, color: Color(0xFF6366F1)),
-                  title: Text(
-                    'Settings',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 14,
-                      color: textColor,
-                    ),
+            // 4. Log out
+            Divider(height: 1, color: hairline),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+              child: SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.white,
+                    side: BorderSide(color: Colors.white.withValues(alpha: 0.4)),
+                    padding: const EdgeInsets.symmetric(vertical: 13),
                   ),
-                  subtitle: Text(
-                    'Theme mode and system preferences',
-                    style: TextStyle(fontSize: 12, color: isDark ? const Color(0xFF94A3B8) : Colors.grey.shade600),
+                  icon: const Icon(Icons.logout, size: 18),
+                  label: const Text(
+                    'Log Out',
+                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
                   ),
-                  onTap: () {
-                    Navigator.pop(context);
-                    showDialog(
-                      context: context,
-                      builder: (_) => SettingsDialog(appState: appState),
+                  onPressed: () async {
+                    await appState.logout();
+                    if (!context.mounted) return;
+                    Navigator.pushAndRemoveUntil(
+                      context,
+                      MaterialPageRoute(builder: (_) => RoleSelectionScreen(appState: appState)),
+                      (route) => false,
                     );
                   },
                 ),
-              ],
-            ),
-          ),
-
-          // 3. Bottom Log Out Button
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-            decoration: BoxDecoration(
-              color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF8FAFC),
-              border: Border(top: BorderSide(color: borderColor)),
-            ),
-            child: SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: Colors.red.shade700,
-                  side: BorderSide(color: Colors.red.shade300),
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                ),
-                icon: const Icon(Icons.logout, size: 18),
-                label: const Text(
-                  'Log Out',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                ),
-                onPressed: () {
-                  appState.setRole(AppRole.none);
-                  Navigator.pushAndRemoveUntil(
-                    context,
-                    MaterialPageRoute(builder: (_) => RoleSelectionScreen(appState: appState)),
-                    (route) => false,
-                  );
-                },
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

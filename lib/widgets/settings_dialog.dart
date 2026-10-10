@@ -1,7 +1,9 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import '../services/app_state.dart';
+import '../theme/app_theme.dart';
 import '../utils/app_snack_bar.dart';
+import 'palette_switcher_dialog.dart';
 
 class SettingsDialog extends StatefulWidget {
   final AppState appState;
@@ -40,7 +42,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
       final file = files.first;
       final bytes = await file.readAsBytes();
 
-      widget.appState.updateCurrentUserPfp(bytes);
+      await widget.appState.uploadAvatar(bytes, file.name);
 
       if (!mounted) return;
       AppSnackBar.showSuccess(context, 'Profile picture updated successfully!');
@@ -71,11 +73,10 @@ class _SettingsDialogState extends State<SettingsDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final cardBg = isDark ? const Color(0xFF1E293B) : Colors.white;
-    final textColor = isDark ? Colors.white : const Color(0xFF0F172A);
-    final borderColor = isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1);
-    final subtextColor = isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
+    final cardBg = Pal.of(context).surface;
+    final textColor = Pal.of(context).ink;
+    final borderColor = Pal.of(context).rule;
+    final subtextColor = Pal.of(context).inkMuted;
     final isAdmin = widget.appState.currentRole == AppRole.admin;
 
     return ListenableBuilder(
@@ -87,33 +88,20 @@ class _SettingsDialogState extends State<SettingsDialog> {
         return AlertDialog(
           backgroundColor: cardBg,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(18),
+            borderRadius: BorderRadius.circular(10),
             side: BorderSide(color: borderColor),
           ),
           title: Row(
             children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: dark
-                      ? const Color(0xFF3B82F6).withValues(alpha: 0.2)
-                      : const Color(0xFFEFF6FF),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(
+              Icon(
                   Icons.settings,
-                  color: dark ? const Color(0xFF60A5FA) : const Color(0xFF1E3A8A),
+                  color: dark ? const Color(0xFF5DB8DB) : const Color(0xFF0B6A90),
                   size: 22,
                 ),
-              ),
               const SizedBox(width: 12),
               Text(
                 'Application Settings',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: textColor,
-                ),
+                style: AppType.display(textColor, size: 22, height: 1.2),
               ),
             ],
           ),
@@ -137,8 +125,8 @@ class _SettingsDialogState extends State<SettingsDialog> {
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: dark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
-                      borderRadius: BorderRadius.circular(12),
+                      color: dark ? const Color(0xFF0E222A) : const Color(0xFFF3F6F7),
+                      borderRadius: BorderRadius.circular(6),
                       border: Border.all(color: borderColor),
                     ),
                     child: Column(
@@ -152,15 +140,15 @@ class _SettingsDialogState extends State<SettingsDialog> {
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
                                 border: Border.all(
-                                  color: dark ? const Color(0xFF3B82F6) : const Color(0xFF1E3A8A),
+                                  color: dark ? const Color(0xFF2E93BD) : const Color(0xFF0B6A90),
                                   width: 2,
                                 ),
                               ),
                               child: CircleAvatar(
                                 radius: 30,
                                 backgroundColor: dark
-                                    ? const Color(0xFF1E293B)
-                                    : const Color(0xFFEFF6FF),
+                                    ? const Color(0xFF14303A)
+                                    : const Color(0xFFE3F0F5),
                                 backgroundImage:
                                     pfpBytes != null ? MemoryImage(pfpBytes) : null,
                                 child: pfpBytes == null
@@ -170,8 +158,8 @@ class _SettingsDialogState extends State<SettingsDialog> {
                                             : Icons.person,
                                         size: 32,
                                         color: isAdmin
-                                            ? const Color(0xFFD97706)
-                                            : const Color(0xFF1E3A8A),
+                                            ? const Color(0xFF9A5B00)
+                                            : const Color(0xFF0B6A90),
                                       )
                                     : null,
                               ),
@@ -190,20 +178,20 @@ class _SettingsDialogState extends State<SettingsDialog> {
                                         decoration: BoxDecoration(
                                           color: isAdmin
                                               ? (dark
-                                                  ? Colors.amber.shade900.withValues(alpha: 0.3)
-                                                  : Colors.amber.shade100)
+                                                  ? Color(0xFF5C3300).withValues(alpha: 0.3)
+                                                  : Color(0xFFFBF1DF))
                                               : (dark
-                                                  ? const Color(0xFF2563EB).withValues(alpha: 0.2)
-                                                  : const Color(0xFFEFF6FF)),
-                                          borderRadius: BorderRadius.circular(6),
+                                                  ? const Color(0xFF1281B0).withValues(alpha: 0.2)
+                                                  : const Color(0xFFE3F0F5)),
+                                          borderRadius: BorderRadius.circular(4),
                                           border: Border.all(
                                             color: isAdmin
                                                 ? (dark
-                                                    ? Colors.amber.shade700
-                                                    : Colors.amber.shade400)
+                                                    ? Color(0xFF9A5B00)
+                                                    : Color(0xFFC98A1E))
                                                 : (dark
-                                                    ? const Color(0xFF3B82F6).withValues(alpha: 0.5)
-                                                    : const Color(0xFF93C5FD)),
+                                                    ? const Color(0xFF2E93BD).withValues(alpha: 0.5)
+                                                    : const Color(0xFF9BD0E6)),
                                           ),
                                         ),
                                         child: Text(
@@ -212,8 +200,8 @@ class _SettingsDialogState extends State<SettingsDialog> {
                                             fontSize: 11,
                                             fontWeight: FontWeight.bold,
                                             color: isAdmin
-                                                ? (dark ? Colors.amber.shade300 : const Color(0xFFB45309))
-                                                : (dark ? const Color(0xFF93C5FD) : const Color(0xFF1E3A8A)),
+                                                ? (dark ? Color(0xFFE0A24A) : const Color(0xFF8A4F00))
+                                                : (dark ? const Color(0xFF9BD0E6) : const Color(0xFF0B6A90)),
                                           ),
                                         ),
                                       ),
@@ -241,12 +229,12 @@ class _SettingsDialogState extends State<SettingsDialog> {
                                           onPressed: _removeProfilePhoto,
                                           icon: Icon(Icons.delete_outline,
                                               size: 15,
-                                              color: dark ? Colors.redAccent.shade100 : Colors.redAccent),
+                                              color: dark ? Color(0xFFF3A8A2) : Color(0xFFB3261E)),
                                           label: Text(
                                             'Remove',
                                             style: TextStyle(
                                               fontSize: 12,
-                                              color: dark ? Colors.redAccent.shade100 : Colors.redAccent,
+                                              color: dark ? Color(0xFFF3A8A2) : Color(0xFFB3261E),
                                             ),
                                           ),
                                         ),
@@ -271,7 +259,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
                                   contentPadding: const EdgeInsets.symmetric(
                                       horizontal: 12, vertical: 10),
                                   border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(8)),
+                                      borderRadius: BorderRadius.circular(5)),
                                 ),
                                 onFieldSubmitted: (_) => _saveName(),
                               ),
@@ -279,12 +267,12 @@ class _SettingsDialogState extends State<SettingsDialog> {
                             const SizedBox(width: 8),
                             ElevatedButton(
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF1E3A8A),
+                                backgroundColor: const Color(0xFF0B6A90),
                                 foregroundColor: Colors.white,
                                 padding: const EdgeInsets.symmetric(
                                     horizontal: 16, vertical: 14),
                                 shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(8),
+                                  borderRadius: BorderRadius.circular(5),
                                 ),
                               ),
                               onPressed: _isSavingName ? null : _saveName,
@@ -309,18 +297,51 @@ class _SettingsDialogState extends State<SettingsDialog> {
                   ),
                   const SizedBox(height: 10),
                   Material(
-                    color: dark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+                    color: dark ? const Color(0xFF0E222A) : const Color(0xFFF3F6F7),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(6),
+                      side: BorderSide(color: borderColor),
+                    ),
+                    clipBehavior: Clip.antiAlias,
+                    child: ListTile(
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                      leading: Icon(
+                        Icons.palette_outlined,
+                        color: dark ? const Color(0xFF5DB8DB) : const Color(0xFF0B6A90),
+                      ),
+                      title: Text(
+                        'Color Palette Scheme',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                          color: textColor,
+                        ),
+                      ),
+                      subtitle: Text(
+                        'Current: ${AppTheme.paletteList.firstWhere((p) => p.id == widget.appState.currentPalette).name}',
+                        style: TextStyle(fontSize: 12, color: subtextColor),
+                      ),
+                      trailing: const Icon(Icons.chevron_right, size: 20),
+                      onTap: () {
+                        Navigator.pop(context);
+                        PaletteSwitcherDialog.show(context, widget.appState);
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Material(
+                    color: dark ? const Color(0xFF0E222A) : const Color(0xFFF3F6F7),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(6),
                       side: BorderSide(color: borderColor),
                     ),
                     clipBehavior: Clip.antiAlias,
                     child: SwitchListTile(
                       shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12)),
+                          borderRadius: BorderRadius.circular(6)),
                       secondary: Icon(
                         dark ? Icons.dark_mode : Icons.light_mode,
-                        color: dark ? Colors.amber : const Color(0xFF1E3A8A),
+                        color: dark ? Color(0xFFC98A1E) : const Color(0xFF0B6A90),
                       ),
                       title: Text(
                         'Dark Mode Theme',
@@ -359,8 +380,8 @@ class _SettingsDialogState extends State<SettingsDialog> {
                   Container(
                     padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
-                      color: dark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
-                      borderRadius: BorderRadius.circular(12),
+                      color: dark ? const Color(0xFF0E222A) : const Color(0xFFF3F6F7),
+                      borderRadius: BorderRadius.circular(6),
                       border: Border.all(color: borderColor),
                     ),
                     child: Column(
@@ -370,8 +391,8 @@ class _SettingsDialogState extends State<SettingsDialog> {
                             Icon(Icons.school,
                                 size: 18,
                                 color: dark
-                                    ? const Color(0xFF60A5FA)
-                                    : const Color(0xFF1E3A8A)),
+                                    ? const Color(0xFF5DB8DB)
+                                    : const Color(0xFF0B6A90)),
                             const SizedBox(width: 8),
                             Expanded(
                               child: Text(
@@ -391,8 +412,8 @@ class _SettingsDialogState extends State<SettingsDialog> {
                             Icon(Icons.description,
                                 size: 18,
                                 color: dark
-                                    ? const Color(0xFF60A5FA)
-                                    : const Color(0xFF1E3A8A)),
+                                    ? const Color(0xFF5DB8DB)
+                                    : const Color(0xFF0B6A90)),
                             const SizedBox(width: 8),
                             Expanded(
                               child: Text(
@@ -400,8 +421,8 @@ class _SettingsDialogState extends State<SettingsDialog> {
                                 style: TextStyle(
                                   fontSize: 12,
                                   color: dark
-                                      ? const Color(0xFF94A3B8)
-                                      : Colors.grey.shade700,
+                                      ? const Color(0xFF8FA6AF)
+                                      : Color(0xFF44575F),
                                 ),
                               ),
                             ),
@@ -417,10 +438,10 @@ class _SettingsDialogState extends State<SettingsDialog> {
           actions: [
             ElevatedButton(
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF1E3A8A),
+                backgroundColor: const Color(0xFF0B6A90),
                 foregroundColor: Colors.white,
                 shape:
-                    RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    RoundedRectangleBorder(borderRadius: BorderRadius.circular(5)),
               ),
               onPressed: () => Navigator.pop(context),
               child: const Text('Done'),

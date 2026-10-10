@@ -3,6 +3,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:final_project/models/models.dart';
 import 'package:final_project/services/app_state.dart';
 import 'package:final_project/utils/app_snack_bar.dart';
+import 'package:final_project/widgets/app_navigation_drawer.dart';
+import 'package:final_project/widgets/catalog_preview_dialog.dart';
 import 'package:final_project/widgets/settings_dialog.dart';
 import 'package:final_project/widgets/submission_details_dialog.dart';
 
@@ -153,5 +155,91 @@ void main() {
 
     expect(find.text('Operation succeeded smoothly!'), findsOneWidget);
     expect(find.byIcon(Icons.check_circle_rounded), findsOneWidget);
+  });
+
+  testWidgets('AppNavigationDrawer displays SUPER ADMIN OPTIONS and opens SuperAdminUserDialog',
+      (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(1280, 1024);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+
+    final appState = AppState();
+    appState.setRole(AppRole.superAdmin);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Builder(
+            builder: (context) => ElevatedButton(
+              onPressed: () => Scaffold.of(context).openDrawer(),
+              child: const Text('Open Drawer'),
+            ),
+          ),
+          drawer: AppNavigationDrawer(appState: appState),
+        ),
+      ),
+    );
+
+    // Open drawer
+    await tester.tap(find.text('Open Drawer'));
+    await tester.pumpAndSettle();
+
+    // Verify Super Admin section
+    expect(find.text('Super admin options'), findsOneWidget);
+    expect(find.text('User Authority & Roles'), findsOneWidget);
+    expect(find.text('Authority: Super Admin'), findsOneWidget);
+
+    // Open Super Admin User Dialog
+    await tester.tap(find.text('User Authority & Roles'));
+    await tester.pumpAndSettle();
+
+    // Verify Super Admin Dialog elements
+    expect(find.text('Super Admin View'), findsOneWidget);
+    expect(find.text('All Depts'), findsOneWidget);
+    expect(find.text('CM'), findsOneWidget);
+    expect(find.text('IT'), findsOneWidget);
+    expect(find.text('ME'), findsOneWidget);
+    expect(find.text('CE'), findsOneWidget);
+  });
+
+  testWidgets('CatalogPreviewDialog renders Clear Faculties and Clear Courses buttons for Admin',
+      (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(1280, 1024);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+
+    final appState = AppState();
+    appState.setRole(AppRole.superAdmin);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Builder(
+            builder: (context) => ElevatedButton(
+              onPressed: () => showDialog(
+                context: context,
+                builder: (_) => CatalogPreviewDialog(appState: appState),
+              ),
+              child: const Text('Open Catalog'),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Open Catalog'));
+    await tester.pumpAndSettle();
+
+    // Verify Tab 1 (Faculties) shows Clear All
+    expect(find.text('Clear All'), findsOneWidget);
+    expect(find.byIcon(Icons.delete_sweep), findsOneWidget);
+
+    // Switch to Tab 2 (Subjects & Semesters)
+    await tester.tap(find.text('Subjects & Semesters'));
+    await tester.pumpAndSettle();
+
+    // Verify Tab 2 (Courses) shows Clear All
+    expect(find.text('Clear All'), findsOneWidget);
+    expect(find.byIcon(Icons.delete_sweep), findsOneWidget);
   });
 }

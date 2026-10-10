@@ -6,8 +6,10 @@ import '../models/models.dart';
 import '../services/app_state.dart';
 import '../services/docx_service.dart';
 import '../utils/app_snack_bar.dart';
-import '../widgets/app_navigation_drawer.dart';
+import '../theme/app_theme.dart';
 import '../widgets/catalog_preview_dialog.dart';
+import '../widgets/portal_shell.dart';
+import '../widgets/portal_ui.dart';
 import '../widgets/submission_details_dialog.dart';
 import 'monitoring_form_screen.dart';
 
@@ -22,6 +24,23 @@ class UserHomeScreen extends StatefulWidget {
 
 class _UserHomeScreenState extends State<UserHomeScreen> {
   bool _isExporting = false;
+  bool _isSyncing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _syncWithBackend();
+  }
+
+  Future<void> _syncWithBackend() async {
+    if (!widget.appState.isAuthenticated) return;
+    setState(() => _isSyncing = true);
+    try {
+      await widget.appState.refreshCatalogFromBackend();
+      await widget.appState.refreshSubmissionsFromBackend();
+    } catch (_) {}
+    if (mounted) setState(() => _isSyncing = false);
+  }
 
   void _showCatalogPreview() {
     showDialog(
@@ -36,86 +55,70 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
       return;
     }
 
+    final p = Pal.of(context);
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
       ),
       builder: (ctx) => SafeArea(
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+          padding: const EdgeInsets.fromLTRB(28, 24, 28, 20),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFEFF6FF),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Icon(Icons.download, color: Color(0xFF1E3A8A)),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Export docx Document',
-                          style: TextStyle(
-                              fontSize: 18, fontWeight: FontWeight.bold),
-                        ),
-                        Text(
-                          '${sub.programName} (${sub.programCode}) • ${sub.semesterType} Sem',
-                          style: TextStyle(
-                              fontSize: 13, color: Colors.grey.shade600),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
+              Text(
+                'Export docx Document',
+                style: AppType.display(p.ink, size: 24, height: 1.2),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '${sub.programName} (${sub.programCode}) • ${sub.semesterType} Sem',
+                style: TextStyle(fontSize: 13, color: p.inkMuted),
               ),
               const SizedBox(height: 20),
-              const Text(
+              Text(
                 'Choose where to save the generated document:',
-                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: p.inkSoft,
+                ),
               ),
               const SizedBox(height: 12),
+              // Option 1: Custom Location
               ListTile(
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  side: BorderSide(color: Colors.blue.shade200),
+                  borderRadius: BorderRadius.circular(6),
+                  side: BorderSide(color: p.brand.withValues(alpha: 0.4)),
                 ),
-                tileColor: Colors.blue.shade50.withValues(alpha: 0.4),
-                leading: const Icon(Icons.folder_open,
-                    color: Color(0xFF1E3A8A), size: 28),
+                tileColor: p.brandTint,
+                leading: Icon(Icons.folder_open, color: p.brand, size: 26),
                 title: const Text('Save to Custom Location (Save As...)',
-                    style: TextStyle(fontWeight: FontWeight.bold)),
+                    style: TextStyle(fontWeight: FontWeight.w600)),
                 subtitle: const Text(
                     'Pick any folder on your computer (e.g. Desktop, Documents, or D: drive).'),
-                trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                trailing: const Icon(Icons.arrow_forward_ios, size: 14),
                 onTap: () {
                   Navigator.pop(ctx);
                   _doExportSubmissionDocx(sub, customLocation: true);
                 },
               ),
               const SizedBox(height: 10),
+              // Option 2: Default Downloads
               ListTile(
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  side: BorderSide(color: Colors.grey.shade300),
+                  borderRadius: BorderRadius.circular(6),
+                  side: BorderSide(color: p.rule),
                 ),
-                tileColor: Colors.grey.shade50,
-                leading: const Icon(Icons.download_done,
-                    color: Color(0xFF0F766E), size: 28),
+                tileColor: p.surface,
+                leading: Icon(Icons.download_done, color: p.inkSoft, size: 26),
                 title: const Text('Quick Save to Downloads Folder',
-                    style: TextStyle(fontWeight: FontWeight.bold)),
+                    style: TextStyle(fontWeight: FontWeight.w600)),
                 subtitle: const Text(
                     'Instantly save to your standard system Downloads folder.'),
-                trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                trailing: const Icon(Icons.arrow_forward_ios, size: 14),
                 onTap: () {
                   Navigator.pop(ctx);
                   _doExportSubmissionDocx(sub, customLocation: false);
@@ -133,7 +136,16 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
       {required bool customLocation}) async {
     setState(() => _isExporting = true);
     try {
-      final docxBytes = await DocxService.generateDocx(submission: sub);
+      Uint8List docxBytes;
+      if (widget.appState.isAuthenticated) {
+        try {
+          docxBytes = await widget.appState.apiService.exportSubmissionDocx(sub.id);
+        } catch (_) {
+          docxBytes = await DocxService.generateDocx(submission: sub);
+        }
+      } else {
+        docxBytes = await DocxService.generateDocx(submission: sub);
+      }
       final filename =
           'IIM_Monitoring_${sub.programCode}_${sub.semesterType}_${DateFormat('yyyyMMdd_HHmm').format(sub.submittedAt)}.docx';
 
@@ -163,11 +175,9 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
       showDialog(
         context: context,
         builder: (ctx) => AlertDialog(
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           title: const Row(
             children: [
-              Icon(Icons.check_circle, color: Colors.green, size: 28),
+              Icon(Icons.check_circle, color: Color(0xFF1F7A4D), size: 28),
               SizedBox(width: 10),
               Text('docx Exported!'),
             ],
@@ -180,7 +190,7 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
               children: [
                 const Text(
                   'All submitted data has been successfully injected into the authentic Format.docx template with 100% original formatting preserved.',
-                  style: TextStyle(fontSize: 13.5, color: Color(0xFF475569)),
+                  style: TextStyle(fontSize: 13.5, color: Color(0xFF44575F)),
                 ),
                 const SizedBox(height: 16),
                 Container(
@@ -188,13 +198,13 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
                     color: isWebDownload
-                        ? Colors.blue.shade50
-                        : Colors.grey.shade100,
+                        ? Color(0xFFE3F0F5)
+                        : Color(0xFFE9EFF1),
                     borderRadius: BorderRadius.circular(10),
                     border: Border.all(
                         color: isWebDownload
-                            ? Colors.blue.shade200
-                            : Colors.grey.shade300),
+                            ? Color(0xFFB5D9E8)
+                            : Color(0xFFC0CDD3)),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -206,7 +216,7 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
                                 ? Icons.cloud_download
                                 : Icons.folder_open,
                             size: 18,
-                            color: const Color(0xFF1E3A8A),
+                            color: const Color(0xFF0B6A90),
                           ),
                           const SizedBox(width: 8),
                           Text(
@@ -227,7 +237,7 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
                             fontSize: 12.5,
                             fontFamily: 'monospace',
                             fontWeight: FontWeight.w600,
-                            color: Color(0xFF1E3A8A)),
+                            color: Color(0xFF0B6A90)),
                       ),
                     ],
                   ),
@@ -258,7 +268,7 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
             ],
             ElevatedButton(
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF1E3A8A),
+                backgroundColor: const Color(0xFF0B6A90),
                 foregroundColor: Colors.white,
               ),
               onPressed: () => Navigator.pop(ctx),
@@ -278,486 +288,336 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
     }
   }
 
+  void _openMonitoringForm() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => MonitoringFormScreen(appState: widget.appState),
+      ),
+    );
+  }
+
+  Widget _buildRoleTag(Pal p) {
+    final dept = widget.appState.currentUserDepartment;
+    return Center(
+      child: PortalTag(
+        icon: Icons.person,
+        color: p.brand,
+        fill: p.brandTint,
+        fontSize: 12.5,
+        label: dept != null ? 'User ($dept)' : 'Role: User',
+      ),
+    );
+  }
+
+  Widget _columnLabel(String text, Pal p) {
+    return Text(
+      text,
+      style: TextStyle(
+        fontSize: 12,
+        fontWeight: FontWeight.w600,
+        color: p.inkMuted,
+      ),
+    );
+  }
+
+  Widget _buildTableHeader(Pal p) {
+    return Container(
+      color: p.paper,
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+      child: Row(
+        children: [
+          Expanded(flex: 5, child: _columnLabel('Program', p)),
+          Expanded(flex: 2, child: _columnLabel('Semester', p)),
+          Expanded(flex: 3, child: _columnLabel('Submitted', p)),
+          Expanded(flex: 2, child: _columnLabel('Faculty entries', p)),
+          const SizedBox(width: 290),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSubmissionRow(
+      BuildContext context, MonitoringSubmission sub, Pal p, bool wide) {
+    final submitted = DateFormat('dd MMM yyyy, hh:mm a').format(sub.submittedAt);
+
+    final program = Row(
+      children: [
+        DeptMonogram(code: sub.programCode),
+        const SizedBox(width: 14),
+        Expanded(
+          child: Text(
+            '${sub.programName} (${sub.programCode})',
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+              color: p.ink,
+            ),
+          ),
+        ),
+      ],
+    );
+
+    final exportButton = ElevatedButton.icon(
+      style: ElevatedButton.styleFrom(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        textStyle: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600),
+      ),
+      onPressed: _isExporting ? null : () => _promptExportOptions(sub),
+      icon: const Icon(Icons.download, size: 15),
+      label: const Text('Export docx'),
+    );
+    final detailsButton = TextButton.icon(
+      style: TextButton.styleFrom(
+        visualDensity: VisualDensity.compact,
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+      ),
+      onPressed: () => _showSubmissionPreview(context, sub),
+      icon: const Icon(Icons.visibility_outlined, size: 15),
+      label: const Text('View Details', style: TextStyle(fontSize: 12.5)),
+    );
+
+    if (wide) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 18),
+        decoration: BoxDecoration(
+          border: Border(top: BorderSide(color: p.rule)),
+        ),
+        child: Row(
+          children: [
+            Expanded(flex: 5, child: program),
+            Expanded(
+              flex: 2,
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: SemesterTag(semesterType: sub.semesterType),
+              ),
+            ),
+            Expanded(
+              flex: 3,
+              child: Text(
+                submitted,
+                style: TextStyle(fontSize: 13.5, color: p.inkSoft),
+              ),
+            ),
+            Expanded(
+              flex: 2,
+              child: Text(
+                '${sub.rows.length}',
+                style: TextStyle(
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w600,
+                  color: p.inkSoft,
+                ),
+              ),
+            ),
+            SizedBox(
+              width: 290,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Flexible(child: detailsButton),
+                  const SizedBox(width: 4),
+                  exportButton,
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        border: Border(top: BorderSide(color: p.rule)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          program,
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 12,
+            runSpacing: 6,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              SemesterTag(semesterType: sub.semesterType),
+              Text(
+                'Submitted: $submitted • ${sub.rows.length} Faculty Entries',
+                style: TextStyle(fontSize: 12.5, color: p.inkMuted),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 4,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [exportButton, detailsButton],
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-
     return ListenableBuilder(
       listenable: widget.appState,
       builder: (context, _) {
         final submissions = widget.appState.submissions;
+        final p = Pal.of(context);
 
-        return Scaffold(
-          backgroundColor: theme.scaffoldBackgroundColor,
-          drawer: AppNavigationDrawer(
-            appState: widget.appState,
-            onOpenCatalog: _showCatalogPreview,
-          ),
-          appBar: AppBar(
-            elevation: 2,
-            leading: Builder(
-              builder: (ctx) => InkWell(
-                onTap: () => Scaffold.of(ctx).openDrawer(),
-                borderRadius: BorderRadius.circular(20),
-                child: Center(
-                  child: CircleAvatar(
-                    radius: 18,
-                    backgroundColor: Colors.white24,
-                    backgroundImage: widget.appState.currentUserPfpBytes != null
-                        ? MemoryImage(widget.appState.currentUserPfpBytes!)
-                        : null,
-                    child: widget.appState.currentUserPfpBytes == null
-                        ? const Icon(Icons.person, color: Colors.white, size: 20)
-                        : null,
-                  ),
-                ),
+        final facultyEntries =
+            submissions.fold<int>(0, (total, s) => total + s.rows.length);
+
+        return PortalShell(
+          appState: widget.appState,
+          onOpenCatalog: _showCatalogPreview,
+          title: 'User Dashboard',
+          actions: [
+            if (widget.appState.isAuthenticated)
+              IconButton(
+                tooltip: 'Sync with Backend',
+                icon: _isSyncing
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.sync, size: 20),
+                onPressed: _isSyncing ? null : _syncWithBackend,
               ),
-            ),
-            title: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(8),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.12),
-                        blurRadius: 4,
-                        offset: const Offset(0, 1),
-                      ),
-                    ],
-                  ),
-                  child: Image.asset(
-                    'assets/images/nobgkkwp.png',
-                    height: 40,
-                    cacheHeight: 120,
-                    filterQuality: FilterQuality.high,
-                    isAntiAlias: true,
-                    fit: BoxFit.contain,
-                    errorBuilder: (c, e, s) => const Icon(Icons.school, size: 24, color: Color(0xFF1E3A8A)),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                const Flexible(
-                  child: Text(
-                    'K.K. Wagh Polytechnic, Nashik - User Dashboard',
-                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
-            ),
-            actions: [
-              Container(
-                margin: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                decoration: BoxDecoration(
-                  color: isDark
-                      ? const Color(0xFF2563EB).withValues(alpha: 0.3)
-                      : Colors.blue.shade900,
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: isDark
-                        ? const Color(0xFF60A5FA)
-                        : Colors.blue.shade300,
-                  ),
-                ),
-                child: const Row(
-                  children: [
-                    Icon(Icons.person, size: 15, color: Colors.white),
-                    SizedBox(width: 6),
-                    Text(
-                      'Role: User',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-            ],
-          ),
+            _buildRoleTag(p),
+            const SizedBox(width: 16),
+          ],
           body: Center(
             child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 960),
+              constraints: const BoxConstraints(maxWidth: 1000),
               child: ListView(
                 padding:
-                    const EdgeInsets.symmetric(horizontal: 24, vertical: 28),
+                    const EdgeInsets.symmetric(horizontal: 32, vertical: 36),
                 children: [
-                  // Welcome Banner
-                  Container(
-                    padding: const EdgeInsets.all(24),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: isDark
-                            ? [const Color(0xFF1E3A8A), const Color(0xFF1E293B)]
-                            : [const Color(0xFF1E3A8A), const Color(0xFF2563EB)],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
+                  // Welcome
+                  Text(
+                    'Welcome, Faculty Member / Staff',
+                    style: AppType.display(p.ink, size: 38, height: 1.1),
+                  ),
+                  const SizedBox(height: 10),
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 620),
+                    child: Text(
+                      'Fill out monitoring formats accurately for internal institute committee verification.',
+                      style: TextStyle(
+                        fontSize: 15,
+                        height: 1.55,
+                        color: p.inkMuted,
                       ),
-                      borderRadius: BorderRadius.circular(16),
-                      boxShadow: [
-                        BoxShadow(
-                          color: isDark
-                              ? Colors.black.withValues(alpha: 0.3)
-                              : Colors.blue.withValues(alpha: 0.15),
-                          blurRadius: 10,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: Colors.white.withValues(alpha: 0.15),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: const Icon(
-                                Icons.assignment_turned_in,
-                                color: Colors.white,
-                                size: 28,
-                              ),
-                            ),
-                            const SizedBox(width: 14),
-                            const Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'Welcome, Faculty Member / Staff',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                  SizedBox(height: 3),
-                                  Text(
-                                    'Fill out monitoring formats accurately for internal institute committee verification.',
-                                    style: TextStyle(
-                                      color: Colors.white70,
-                                      fontSize: 13,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
                     ),
                   ),
 
                   const SizedBox(height: 32),
 
-                  // The primary requested option
+                  PortalStatRow(
+                    stats: [
+                      PortalStatData(
+                        label: 'Total submissions',
+                        value: '${submissions.length}',
+                        icon: Icons.assignment_outlined,
+                      ),
+                      PortalStatData(
+                        label: 'Faculty entries',
+                        value: '$facultyEntries',
+                        icon: Icons.groups_outlined,
+                      ),
+                      PortalStatData(
+                        label: 'Programs in catalog',
+                        value: '${widget.appState.programs.length}',
+                        icon: Icons.school_outlined,
+                      ),
+                      PortalStatData(
+                        label: 'Faculty in catalog',
+                        value: '${widget.appState.faculties.length}',
+                        icon: Icons.badge_outlined,
+                      ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 44),
+
                   Text(
                     'Available Monitoring Formats',
                     style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: isDark ? Colors.white : const Color(0xFF0F172A),
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: p.brand,
                     ),
                   ),
-                  const SizedBox(height: 12),
-
-                  InkWell(
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) =>
-                              MonitoringFormScreen(appState: widget.appState),
-                        ),
-                      );
-                    },
-                    borderRadius: BorderRadius.circular(16),
-                    child: Container(
-                      padding: const EdgeInsets.all(22),
-                      decoration: BoxDecoration(
-                        color: isDark ? const Color(0xFF1E293B) : Colors.white,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                          color: isDark
-                              ? const Color(0xFF3B82F6).withValues(alpha: 0.5)
-                              : const Color(0xFF93C5FD),
-                          width: 1.5,
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: isDark
-                                ? Colors.black.withValues(alpha: 0.2)
-                                : Colors.blue.withValues(alpha: 0.08),
-                            blurRadius: 12,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
-                      ),
-                      child: Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              color: isDark
-                                  ? const Color(0xFF2563EB).withValues(alpha: 0.2)
-                                  : const Color(0xFFEFF6FF),
-                              borderRadius: BorderRadius.circular(14),
-                            ),
-                            child: Icon(
-                              Icons.description,
-                              color: isDark
-                                  ? const Color(0xFF60A5FA)
-                                  : const Color(0xFF1E3A8A),
-                              size: 36,
-                            ),
-                          ),
-                          const SizedBox(width: 20),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Internal Institute Monitoring Format Internal Institute Monitoring Format',
-                                  style: TextStyle(
-                                    fontSize: 17,
-                                    fontWeight: FontWeight.bold,
-                                    color: isDark
-                                        ? const Color(0xFF93C5FD)
-                                        : const Color(0xFF1E3A8A),
-                                    height: 1.3,
-                                  ),
-                                ),
-                                const SizedBox(height: 6),
-                                Text(
-                                  'Fill monitoring data: select semester type (Even/Odd), choose program, assign faculty credentials, qualifications, approvals, and verify curriculum covered.',
-                                  style: TextStyle(
-                                    fontSize: 13.5,
-                                    color: isDark
-                                        ? const Color(0xFF94A3B8)
-                                        : const Color(0xFF64748B),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(width: 16),
-                          ElevatedButton.icon(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF1E3A8A),
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 20, vertical: 14),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                            ),
-                            onPressed: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) =>
-                                      MonitoringFormScreen(appState: widget.appState),
-                                ),
-                              );
-                            },
-                            icon: const Icon(Icons.edit_note, size: 20),
-                            label: const Text('Fill Form'),
-                          ),
-                        ],
-                      ),
-                    ),
+                  const SizedBox(height: 14),
+                  PortalActionPanel(
+                    title:
+                        'Internal Institute Monitoring Format Internal Institute Monitoring Format',
+                    description:
+                        'Fill monitoring data: select semester type (Even/Odd), choose program, assign faculty credentials, qualifications, approvals, and verify curriculum covered.',
+                    onTap: _openMonitoringForm,
                   ),
 
-                  const SizedBox(height: 36),
+                  const SizedBox(height: 44),
 
                   // Recent Submissions Section
-                  Text(
-                    'Recent Submissions (${submissions.length})',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: isDark ? Colors.white : const Color(0xFF0F172A),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-
-                  if (submissions.isEmpty)
-                    Container(
-                      padding: const EdgeInsets.all(32),
-                      decoration: BoxDecoration(
-                        color: isDark ? const Color(0xFF1E293B) : Colors.white,
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(
-                          color: isDark
-                              ? const Color(0xFF334155)
-                              : const Color(0xFFE2E8F0),
-                        ),
-                      ),
-                      child: Column(
-                        children: [
-                          Icon(
-                            Icons.inbox,
-                            size: 48,
-                            color: isDark
-                                ? const Color(0xFF64748B)
-                                : Colors.grey.shade400,
-                          ),
-                          const SizedBox(height: 12),
-                          Text(
-                            'No monitoring formats submitted yet',
-                            style: TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w600,
-                              color: isDark
-                                  ? const Color(0xFFCBD5E1)
-                                  : Colors.grey.shade700,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'Click "Fill Form" above to begin your first submission.',
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: isDark
-                                  ? const Color(0xFF94A3B8)
-                                  : Colors.grey.shade500,
-                            ),
-                          ),
-                        ],
-                      ),
-                    )
-                  else
-                    ...submissions.map((sub) {
-                      return Card(
-                        margin: const EdgeInsets.only(bottom: 12),
-                        color: isDark ? const Color(0xFF1E293B) : Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          side: BorderSide(
-                            color: isDark
-                                ? const Color(0xFF334155)
-                                : const Color(0xFFE2E8F0),
-                          ),
-                        ),
-                        child: Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: Row(
-                            children: [
-                              CircleAvatar(
-                                backgroundColor: isDark
-                                    ? const Color(0xFF2563EB).withValues(alpha: 0.2)
-                                    : const Color(0xFFEFF6FF),
-                                child: Icon(Icons.check,
-                                    color: isDark
-                                        ? const Color(0xFF60A5FA)
-                                        : const Color(0xFF1E3A8A)),
-                              ),
-                              const SizedBox(width: 16),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Wrap(
-                                      crossAxisAlignment:
-                                          WrapCrossAlignment.center,
-                                      spacing: 8,
-                                      runSpacing: 4,
-                                      children: [
-                                        Text(
-                                          '${sub.programName} (${sub.programCode})',
-                                          style: TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 15,
-                                            color: isDark
-                                                ? Colors.white
-                                                : const Color(0xFF0F172A),
-                                          ),
-                                        ),
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(
-                                              horizontal: 8, vertical: 2),
-                                          decoration: BoxDecoration(
-                                            color: sub.semesterType == 'ODD'
-                                                ? Colors.indigo.shade50
-                                                : Colors.teal.shade50,
-                                            borderRadius:
-                                                BorderRadius.circular(6),
-                                            border: Border.all(
-                                              color: sub.semesterType == 'ODD'
-                                                  ? Colors.indigo.shade200
-                                                  : Colors.teal.shade200,
-                                            ),
-                                          ),
-                                          child: Text(
-                                            '${sub.semesterType} SEM',
-                                            style: TextStyle(
-                                              fontSize: 11,
-                                              fontWeight: FontWeight.bold,
-                                              color: sub.semesterType == 'ODD'
-                                                  ? Colors.indigo.shade800
-                                                  : Colors.teal.shade800,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      'Submitted: ${DateFormat('dd MMM yyyy, hh:mm a').format(sub.submittedAt)} • ${sub.rows.length} Faculty Entries',
-                                      style: TextStyle(
-                                        fontSize: 12.5,
-                                        color: isDark
-                                            ? const Color(0xFF94A3B8)
-                                            : Colors.grey.shade600,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Row(
-                                mainAxisSize: MainAxisSize.min,
+                  PortalCard(
+                    title: 'Recent Submissions (${submissions.length})',
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        if (submissions.isEmpty)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 32, vertical: 56),
+                            child: Center(
+                              child: Column(
                                 children: [
-                                  ElevatedButton.icon(
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: const Color(0xFF1E3A8A),
-                                      foregroundColor: Colors.white,
-                                      elevation: 2,
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                    ),
-                                    onPressed: _isExporting
-                                        ? null
-                                        : () => _promptExportOptions(sub),
-                                    icon: const Icon(Icons.download, size: 16),
-                                    label: const Text('Export docx'),
+                                  Icon(Icons.inbox_outlined,
+                                      size: 40, color: p.ruleStrong),
+                                  const SizedBox(height: 14),
+                                  Text(
+                                    'No monitoring formats submitted yet',
+                                    textAlign: TextAlign.center,
+                                    style: AppType.display(p.ink, size: 22),
                                   ),
-                                  const SizedBox(width: 8),
-                                  TextButton.icon(
-                                    onPressed: () =>
-                                        _showSubmissionPreview(context, sub),
-                                    icon: const Icon(Icons.visibility, size: 16),
-                                    label: const Text('View Details'),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    'Click "Fill Form" above to begin your first submission.',
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                      fontSize: 13.5,
+                                      color: p.inkMuted,
+                                    ),
                                   ),
                                 ],
                               ),
-                            ],
+                            ),
+                          )
+                        else
+                          LayoutBuilder(
+                            builder: (context, constraints) {
+                              final wide = constraints.maxWidth >= 820;
+                              return Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  if (wide) _buildTableHeader(p),
+                                  ...submissions.map((sub) =>
+                                      _buildSubmissionRow(context, sub, p, wide)),
+                                ],
+                              );
+                            },
                           ),
-                        ),
-                      );
-                    }),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 40),
                 ],
               ),
             ),

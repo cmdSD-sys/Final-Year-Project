@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import '../models/models.dart';
 import '../services/app_state.dart';
 import '../services/docx_service.dart';
+import '../theme/app_theme.dart';
 import '../utils/app_snack_bar.dart';
+import '../widgets/palette_switcher_dialog.dart';
+import '../widgets/portal_ui.dart';
 
 class MonitoringFormScreen extends StatefulWidget {
   final AppState appState;
@@ -34,7 +37,18 @@ class _MonitoringFormScreenState extends State<MonitoringFormScreen> {
   void initState() {
     super.initState();
     final progs = widget.appState.programs;
-    if (progs.isNotEmpty) {
+    final userDept = widget.appState.currentUserDepartment;
+    if (userDept != null && !widget.appState.isSuperAdmin) {
+      final deptProg = progs.cast<ProgramInfo?>().firstWhere(
+        (p) => p?.code.toUpperCase() == userDept.toUpperCase(),
+        orElse: () => null,
+      );
+      if (deptProg != null) {
+        _selectedProgram = deptProg;
+      } else if (progs.isNotEmpty) {
+        _selectedProgram = progs.first;
+      }
+    } else if (progs.isNotEmpty) {
       _selectedProgram = progs.first;
     }
     _initRows(_rowCount);
@@ -111,7 +125,7 @@ class _MonitoringFormScreenState extends State<MonitoringFormScreen> {
     });
   }
 
-  void _handleSave() {
+  Future<void> _handleSave() async {
     if (_selectedProgram == null) {
       AppSnackBar.showError(context, 'Please select a Program.');
       return;
@@ -158,9 +172,9 @@ class _MonitoringFormScreenState extends State<MonitoringFormScreen> {
       r.tuActual = DocxService.calcMultipliedHours(r.tuPrescribed, entryWeeks);
     }
 
-    final submissionId = 'IIM-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}';
+    final initialId = 'IIM-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}';
     final submission = MonitoringSubmission(
-      id: submissionId,
+      id: initialId,
       programName: _selectedProgram!.name,
       programCode: _selectedProgram!.code,
       semesterType: _semesterType.toUpperCase(),
@@ -173,16 +187,18 @@ class _MonitoringFormScreenState extends State<MonitoringFormScreen> {
       rows: _rows.map((r) => r.copyWith()).toList(),
     );
 
-    widget.appState.saveSubmission(submission);
+    final saved = await widget.appState.saveSubmission(submission);
+    final submissionId = saved.id;
+
+    if (!mounted) return;
 
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Row(
           children: [
-            Icon(Icons.check_circle, color: Colors.green, size: 28),
+            Icon(Icons.check_circle, color: Color(0xFF1F7A4D), size: 28),
             SizedBox(width: 10),
             Text('Form Saved Successfully'),
           ],
@@ -202,14 +218,14 @@ class _MonitoringFormScreenState extends State<MonitoringFormScreen> {
             const SizedBox(height: 12),
             const Text(
               'Your monitoring data has been safely saved! The Administrator can now review and export the official Format.docx document.',
-              style: TextStyle(fontSize: 13.5, color: Color(0xFF475569)),
+              style: TextStyle(fontSize: 13.5, color: Color(0xFF44575F)),
             ),
           ],
         ),
         actions: [
           ElevatedButton(
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF1E3A8A),
+              backgroundColor: const Color(0xFF0B6A90),
               foregroundColor: Colors.white,
             ),
             onPressed: () {
@@ -225,66 +241,103 @@ class _MonitoringFormScreenState extends State<MonitoringFormScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final availablePrograms = widget.appState.programs;
-    ProgramInfo? prog = _selectedProgram;
-    if (availablePrograms.isNotEmpty) {
-      if (prog == null || !availablePrograms.contains(prog)) {
-        prog = availablePrograms.firstWhere(
-          (p) => prog != null && p.code.toUpperCase() == prog.code.toUpperCase(),
-          orElse: () => availablePrograms.first,
-        );
-        _selectedProgram = prog;
-      }
-    } else {
-      prog = null;
-      _selectedProgram = null;
-    }
+    return ListenableBuilder(
+      listenable: widget.appState,
+      builder: (context, _) {
+        final allPrograms = widget.appState.programs;
+        final userDept = widget.appState.currentUserDepartment;
+        final isSuper = widget.appState.isSuperAdmin;
 
-    final faculties = prog != null
-        ? widget.appState.getFacultiesForProgram(prog.code)
-        : <FacultyInfo>[];
-    final schemes = prog != null ? _getAvailableSchemes(prog.code) : <String>[];
+        final List<ProgramInfo> availablePrograms;
+        if (!isSuper && userDept != null && userDept.trim().isNotEmpty) {
+          final deptClean = userDept.trim().toUpperCase();
+          final matches = allPrograms.where((p) => p.code.toUpperCase() == deptClean).toList();
+          if (matches.isNotEmpty) {
+            availablePrograms = matches;
+          } else {
+            availablePrograms = [
+              ProgramInfo(code: deptClean, name: '$deptClean Department'),
+            ];
+          }
+        } else {
+          availablePrograms = allPrograms;
+        }
 
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+        ProgramInfo? prog = _selectedProgram;
+        if (availablePrograms.isNotEmpty) {
+          if (prog == null || !availablePrograms.any((p) => p.code.toUpperCase() == prog!.code.toUpperCase())) {
+            prog = availablePrograms.firstWhere(
+              (p) => _selectedProgram != null && p.code.toUpperCase() == _selectedProgram!.code.toUpperCase(),
+              orElse: () => availablePrograms.first,
+            );
+            _selectedProgram = prog;
+          }
+        } else {
+          prog = null;
+          _selectedProgram = null;
+        }
 
-    return Scaffold(
-      backgroundColor: isDark ? const Color(0xFF0B1120) : const Color(0xFFF8FAFC),
-      appBar: AppBar(
-        elevation: 2,
-        title: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(8),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.12),
-                    blurRadius: 4,
-                    offset: const Offset(0, 1),
-                  ),
-                ],
-              ),
-              child: Image.asset(
-                'assets/images/nobgkkwp.png',
-                height: 40,
-                cacheHeight: 120,
-                filterQuality: FilterQuality.high,
-                isAntiAlias: true,
-                fit: BoxFit.contain,
-                errorBuilder: (c, e, s) => const Icon(Icons.school, size: 24, color: Color(0xFF1E3A8A)),
-              ),
+        final faculties = prog != null
+            ? widget.appState.getFacultiesForProgram(prog.code)
+            : <FacultyInfo>[];
+        final schemes = prog != null ? _getAvailableSchemes(prog.code) : <String>[];
+
+        final isDark = Theme.of(context).brightness == Brightness.dark;
+
+        final pal = Pal.of(context);
+
+        return Scaffold(
+          backgroundColor: pal.paper,
+          appBar: AppBar(
+            title: const PortalAppBarTitle(
+              title: 'Internal Institute Monitoring Format (IIM-26-27)',
             ),
-            const SizedBox(width: 12),
-            const Flexible(
-              child: Text(
-                'Internal Institute Monitoring Format (IIM-26-27)',
-                style: TextStyle(fontSize: 16.5, fontWeight: FontWeight.w600),
-                overflow: TextOverflow.ellipsis,
+            actions: [
+              IconButton(
+                icon: const Icon(Icons.palette_outlined),
+                tooltip: 'Theme & Color Palette',
+                onPressed: () => PaletteSwitcherDialog.show(context, widget.appState),
               ),
+              const SizedBox(width: 8),
+            ],
+          ),
+      // Save Form Button (kept in view while scrolling)
+      bottomNavigationBar: Container(
+        decoration: BoxDecoration(
+          color: pal.surface,
+          border: Border(top: BorderSide(color: pal.rule)),
+          boxShadow: [
+            BoxShadow(
+              color: pal.ink.withValues(alpha: 0.06),
+              blurRadius: 16,
+              offset: const Offset(0, -4),
             ),
           ],
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+        child: SafeArea(
+          top: false,
+          child: Center(
+            heightFactor: 1,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 972),
+              child: SizedBox(
+                height: 52,
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: _handleSave,
+                  icon: const Icon(Icons.save),
+                  label: Text(
+                    'Save Monitoring Form (${_rows.length} Entries)',
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
         ),
       ),
       body: Center(
@@ -293,41 +346,19 @@ class _MonitoringFormScreenState extends State<MonitoringFormScreen> {
           child: Form(
             key: _formKey,
             child: ListView(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
               children: [
                 // Top Configuration Card
                 Card(
-                  elevation: 2,
-                  color: isDark ? const Color(0xFF1E293B) : Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
-                    side: BorderSide(
-                      color: isDark ? const Color(0xFF334155) : Colors.blue.shade100,
-                    ),
-                  ),
                   child: Padding(
                     padding: const EdgeInsets.all(20),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Row(
-                          children: [
-                            Icon(
-                              Icons.tune,
-                              color: isDark ? const Color(0xFF60A5FA) : const Color(0xFF1E3A8A),
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              'Format Setup & Parameters',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                color: isDark ? Colors.white : const Color(0xFF1E293B),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 16),
+                        _sectionTitle(pal, '1', 'Format Setup & Parameters'),
+                        const SizedBox(height: 14),
+                        Divider(height: 1, color: pal.rule),
+                        const SizedBox(height: 20),
                         Wrap(
                           spacing: 20,
                           runSpacing: 16,
@@ -344,7 +375,7 @@ class _MonitoringFormScreenState extends State<MonitoringFormScreen> {
                                     style: TextStyle(
                                       fontSize: 13,
                                       fontWeight: FontWeight.w600,
-                                      color: isDark ? const Color(0xFFCBD5E1) : const Color(0xFF334155),
+                                      color: isDark ? const Color(0xFFC0CDD3) : const Color(0xFF2B4650),
                                     ),
                                   ),
                                   const SizedBox(height: 6),
@@ -356,7 +387,7 @@ class _MonitoringFormScreenState extends State<MonitoringFormScreen> {
                                           const EdgeInsets.symmetric(
                                               horizontal: 14, vertical: 10),
                                       border: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(8),
+                                        borderRadius: BorderRadius.circular(5),
                                       ),
                                     ),
                                     items: const [
@@ -386,13 +417,15 @@ class _MonitoringFormScreenState extends State<MonitoringFormScreen> {
                                     style: TextStyle(
                                       fontSize: 13,
                                       fontWeight: FontWeight.w600,
-                                      color: isDark ? const Color(0xFFCBD5E1) : const Color(0xFF334155),
+                                      color: isDark ? const Color(0xFFC0CDD3) : const Color(0xFF2B4650),
                                     ),
                                   ),
                                   const SizedBox(height: 6),
                                   DropdownButtonFormField<ProgramInfo>(
                                     key: ValueKey('prog_${_selectedProgram?.code}_${availablePrograms.length}'),
-                                    initialValue: (prog != null && availablePrograms.contains(prog)) ? prog : null,
+                                    initialValue: (prog != null && availablePrograms.any((p) => p.code.toUpperCase() == prog!.code.toUpperCase()))
+                                        ? availablePrograms.firstWhere((p) => p.code.toUpperCase() == prog!.code.toUpperCase())
+                                        : null,
                                     isExpanded: true,
                                     hint: const Text('Select Program'),
                                     decoration: InputDecoration(
@@ -400,8 +433,14 @@ class _MonitoringFormScreenState extends State<MonitoringFormScreen> {
                                           const EdgeInsets.symmetric(
                                               horizontal: 14, vertical: 10),
                                       border: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(8),
+                                        borderRadius: BorderRadius.circular(5),
                                       ),
+                                      suffixIcon: !isSuper
+                                          ? const Tooltip(
+                                              message: 'Locked to your department',
+                                              child: Icon(Icons.lock_outline, size: 18),
+                                            )
+                                          : null,
                                     ),
                                     items: availablePrograms
                                         .map((p) => DropdownMenuItem(
@@ -412,7 +451,7 @@ class _MonitoringFormScreenState extends State<MonitoringFormScreen> {
                                               ),
                                             ))
                                         .toList(),
-                                    onChanged: _onProgramChanged,
+                                    onChanged: !isSuper ? null : _onProgramChanged,
                                   ),
                                 ],
                               ),
@@ -429,7 +468,7 @@ class _MonitoringFormScreenState extends State<MonitoringFormScreen> {
                                     style: TextStyle(
                                       fontSize: 13,
                                       fontWeight: FontWeight.w600,
-                                      color: isDark ? const Color(0xFFCBD5E1) : const Color(0xFF334155),
+                                      color: isDark ? const Color(0xFFC0CDD3) : const Color(0xFF2B4650),
                                     ),
                                   ),
                                   const SizedBox(height: 6),
@@ -441,7 +480,7 @@ class _MonitoringFormScreenState extends State<MonitoringFormScreen> {
                                           const EdgeInsets.symmetric(
                                               horizontal: 14, vertical: 10),
                                       border: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(8),
+                                        borderRadius: BorderRadius.circular(5),
                                       ),
                                     ),
                                     items: const [
@@ -477,7 +516,7 @@ class _MonitoringFormScreenState extends State<MonitoringFormScreen> {
                                     style: TextStyle(
                                       fontSize: 13,
                                       fontWeight: FontWeight.w600,
-                                      color: isDark ? const Color(0xFFCBD5E1) : const Color(0xFF334155),
+                                      color: isDark ? const Color(0xFFC0CDD3) : const Color(0xFF2B4650),
                                     ),
                                   ),
                                   const SizedBox(height: 6),
@@ -490,7 +529,7 @@ class _MonitoringFormScreenState extends State<MonitoringFormScreen> {
                                           const EdgeInsets.symmetric(
                                               horizontal: 14, vertical: 10),
                                       border: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(8),
+                                        borderRadius: BorderRadius.circular(5),
                                       ),
                                     ),
                                     items: List.generate(26, (i) => i + 1).map((w) {
@@ -518,7 +557,7 @@ class _MonitoringFormScreenState extends State<MonitoringFormScreen> {
                                     style: TextStyle(
                                       fontSize: 13,
                                       fontWeight: FontWeight.w600,
-                                      color: isDark ? const Color(0xFFCBD5E1) : const Color(0xFF334155),
+                                      color: isDark ? const Color(0xFFC0CDD3) : const Color(0xFF2B4650),
                                     ),
                                   ),
                                   const SizedBox(height: 6),
@@ -531,7 +570,7 @@ class _MonitoringFormScreenState extends State<MonitoringFormScreen> {
                                           const EdgeInsets.symmetric(
                                               horizontal: 14, vertical: 10),
                                       border: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(8),
+                                        borderRadius: BorderRadius.circular(5),
                                       ),
                                     ),
                                     items: List.generate(26, (i) => i + 1).map((w) {
@@ -559,7 +598,7 @@ class _MonitoringFormScreenState extends State<MonitoringFormScreen> {
                                     style: TextStyle(
                                       fontSize: 13,
                                       fontWeight: FontWeight.w600,
-                                      color: isDark ? const Color(0xFFCBD5E1) : const Color(0xFF334155),
+                                      color: isDark ? const Color(0xFFC0CDD3) : const Color(0xFF2B4650),
                                     ),
                                   ),
                                   const SizedBox(height: 6),
@@ -572,7 +611,7 @@ class _MonitoringFormScreenState extends State<MonitoringFormScreen> {
                                           const EdgeInsets.symmetric(
                                               horizontal: 14, vertical: 10),
                                       border: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(8),
+                                        borderRadius: BorderRadius.circular(5),
                                       ),
                                     ),
                                     items: List.generate(26, (i) => i + 1).map((w) {
@@ -600,7 +639,7 @@ class _MonitoringFormScreenState extends State<MonitoringFormScreen> {
                                     style: TextStyle(
                                       fontSize: 13,
                                       fontWeight: FontWeight.w600,
-                                      color: isDark ? const Color(0xFFCBD5E1) : const Color(0xFF334155),
+                                      color: isDark ? const Color(0xFFC0CDD3) : const Color(0xFF2B4650),
                                     ),
                                   ),
                                   const SizedBox(height: 6),
@@ -623,17 +662,17 @@ class _MonitoringFormScreenState extends State<MonitoringFormScreen> {
                                             vertical: 8),
                                         decoration: BoxDecoration(
                                           border: Border.all(
-                                              color: isDark ? const Color(0xFF334155) : Colors.grey.shade300),
+                                              color: isDark ? const Color(0xFF2B4650) : Color(0xFFC0CDD3)),
                                           borderRadius:
-                                              BorderRadius.circular(8),
-                                          color: isDark ? const Color(0xFF0F172A) : Colors.white,
+                                              BorderRadius.circular(5),
+                                          color: isDark ? const Color(0xFF0E222A) : Colors.white,
                                         ),
                                         child: Text(
                                           '$_rowCount',
                                           style: TextStyle(
                                             fontSize: 16,
                                             fontWeight: FontWeight.bold,
-                                            color: isDark ? Colors.white : const Color(0xFF0F172A),
+                                            color: isDark ? Colors.white : const Color(0xFF0E222A),
                                           ),
                                         ),
                                       ),
@@ -651,7 +690,7 @@ class _MonitoringFormScreenState extends State<MonitoringFormScreen> {
                                       Text(
                                         'rows',
                                         style: TextStyle(
-                                            color: isDark ? const Color(0xFF94A3B8) : Colors.grey.shade600),
+                                            color: isDark ? const Color(0xFF8FA6AF) : Color(0xFF5B6E76)),
                                       ),
                                     ],
                                   ),
@@ -671,12 +710,11 @@ class _MonitoringFormScreenState extends State<MonitoringFormScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
-                      'Faculty Data Rows (${_rows.length})',
-                      style: TextStyle(
-                        fontSize: 17,
-                        fontWeight: FontWeight.bold,
-                        color: isDark ? Colors.white : const Color(0xFF1E293B),
+                    Flexible(
+                      child: _sectionTitle(
+                        pal,
+                        '2',
+                        'Faculty Data Rows (${_rows.length})',
                       ),
                     ),
                     const SizedBox(width: 8),
@@ -685,7 +723,7 @@ class _MonitoringFormScreenState extends State<MonitoringFormScreen> {
                         'Auto-fills Qualification & Approval upon selecting Faculty',
                         style: TextStyle(
                           fontSize: 12.5,
-                          color: isDark ? const Color(0xFF94A3B8) : Colors.grey.shade600,
+                          color: pal.inkMuted,
                           fontStyle: FontStyle.italic,
                         ),
                         overflow: TextOverflow.ellipsis,
@@ -705,37 +743,45 @@ class _MonitoringFormScreenState extends State<MonitoringFormScreen> {
                   );
                 }),
 
-                const SizedBox(height: 32),
-
-                // Save Form Button
-                SizedBox(
-                  height: 52,
-                  child: ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF1E3A8A),
-                      foregroundColor: Colors.white,
-                      elevation: 3,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    onPressed: _handleSave,
-                    icon: const Icon(Icons.save),
-                    label: Text(
-                      'Save Monitoring Form (${_rows.length} Entries)',
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 32),
+                const SizedBox(height: 24),
               ],
             ),
           ),
         ),
       ),
+    );
+      },
+    );
+  }
+
+  Widget _sectionTitle(Pal pal, String step, String text) {
+    return Row(
+      children: [
+        Container(
+          width: 30,
+          height: 30,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: pal.brandDeep,
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: Text(
+            step,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Flexible(
+          child: Text(
+            text,
+            style: AppType.display(pal.ink, size: 24, height: 1.2),
+          ),
+        ),
+      ],
     );
   }
 
@@ -755,12 +801,22 @@ class _MonitoringFormScreenState extends State<MonitoringFormScreen> {
 
     final uniqueFaculties = <String, FacultyInfo>{};
     for (final f in faculties) {
-      uniqueFaculties.putIfAbsent(f.name, () => f);
+      if (f.name.trim().isNotEmpty) {
+        uniqueFaculties.putIfAbsent(f.name.trim(), () => f);
+      }
+    }
+    if (row.facultyName.trim().isNotEmpty && !uniqueFaculties.containsKey(row.facultyName.trim())) {
+      uniqueFaculties[row.facultyName.trim()] = FacultyInfo(
+        name: row.facultyName.trim(),
+        qualification: row.qualification,
+        approvalStatus: row.facultyApproved,
+        programCode: _selectedProgram?.code ?? '',
+      );
     }
     final facultyList = uniqueFaculties.values.toList();
     final selectedFacultyName =
-        (row.facultyName.isNotEmpty && uniqueFaculties.containsKey(row.facultyName))
-            ? row.facultyName
+        (row.facultyName.trim().isNotEmpty && uniqueFaculties.containsKey(row.facultyName.trim()))
+            ? row.facultyName.trim()
             : null;
 
     final schemeList = schemes.toSet().toList();
@@ -786,16 +842,10 @@ class _MonitoringFormScreenState extends State<MonitoringFormScreen> {
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
+    final pal = Pal.of(context);
+
     return Card(
-      elevation: 2,
       margin: const EdgeInsets.only(bottom: 16),
-      color: isDark ? const Color(0xFF1E293B) : Colors.white,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14),
-        side: BorderSide(
-          color: isDark ? const Color(0xFF334155) : Colors.grey.shade200,
-        ),
-      ),
       child: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
@@ -804,26 +854,23 @@ class _MonitoringFormScreenState extends State<MonitoringFormScreen> {
             // Row Header
             Row(
               children: [
-                CircleAvatar(
-                  radius: 14,
-                  backgroundColor: const Color(0xFF1E3A8A),
+                Container(
+                  width: 30,
+                  height: 30,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: pal.brandTint,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
                   child: Text(
                     '${index + 1}',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: AppType.display(pal.brand, size: 17, height: 1.0),
                   ),
                 ),
-                const SizedBox(width: 10),
+                const SizedBox(width: 12),
                 Text(
                   'Row #${index + 1} - Faculty Entry',
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.bold,
-                    color: isDark ? Colors.white : const Color(0xFF1E293B),
-                  ),
+                  style: AppType.display(pal.ink, size: 20, height: 1.2),
                 ),
                 if (row.branchSemScheme.isNotEmpty) ...[
                   const Spacer(),
@@ -831,13 +878,13 @@ class _MonitoringFormScreenState extends State<MonitoringFormScreen> {
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                     decoration: BoxDecoration(
                       color: isDark
-                          ? const Color(0xFF2563EB).withValues(alpha: 0.2)
-                          : Colors.blue.shade50,
-                      borderRadius: BorderRadius.circular(6),
+                          ? const Color(0xFF1281B0).withValues(alpha: 0.2)
+                          : Color(0xFFE3F0F5),
+                      borderRadius: BorderRadius.circular(4),
                       border: Border.all(
                         color: isDark
-                            ? const Color(0xFF3B82F6).withValues(alpha: 0.4)
-                            : Colors.blue.shade200,
+                            ? const Color(0xFF2E93BD).withValues(alpha: 0.4)
+                            : Color(0xFFB5D9E8),
                       ),
                     ),
                     child: Text(
@@ -845,14 +892,16 @@ class _MonitoringFormScreenState extends State<MonitoringFormScreen> {
                       style: TextStyle(
                         fontSize: 11.5,
                         fontWeight: FontWeight.bold,
-                        color: isDark ? const Color(0xFF93C5FD) : Colors.blue.shade900,
+                        color: isDark ? const Color(0xFF9BD0E6) : Color(0xFF084E6B),
                       ),
                     ),
                   ),
                 ],
               ],
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 14),
+            Divider(height: 1, color: pal.rule),
+            const SizedBox(height: 18),
 
             // Form Fields Grid
             LayoutBuilder(
@@ -873,7 +922,7 @@ class _MonitoringFormScreenState extends State<MonitoringFormScreen> {
                             style: TextStyle(
                               fontSize: 13,
                               fontWeight: FontWeight.w600,
-                              color: isDark ? const Color(0xFFCBD5E1) : const Color(0xFF334155),
+                              color: isDark ? const Color(0xFFC0CDD3) : const Color(0xFF2B4650),
                             ),
                           ),
                           const SizedBox(height: 6),
@@ -881,12 +930,16 @@ class _MonitoringFormScreenState extends State<MonitoringFormScreen> {
                             key: ValueKey('fac_${index}_${selectedFacultyName}_${facultyList.length}_${_rows.map((r) => r.facultyName).join("_")}'),
                             initialValue: selectedFacultyName,
                             isExpanded: true,
-                            hint: const Text('Select Faculty'),
+                            hint: Text(facultyList.isEmpty
+                                ? (_selectedProgram != null
+                                    ? 'No faculties for ${_selectedProgram!.code} (Upload sheet)'
+                                    : 'Select Program first')
+                                : 'Select Faculty'),
                             decoration: InputDecoration(
                               contentPadding: const EdgeInsets.symmetric(
                                   horizontal: 12, vertical: 10),
                               border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(8),
+                                borderRadius: BorderRadius.circular(5),
                               ),
                             ),
                             selectedItemBuilder: (context) {
@@ -927,10 +980,10 @@ class _MonitoringFormScreenState extends State<MonitoringFormScreen> {
                                           padding: const EdgeInsets.symmetric(
                                               horizontal: 6, vertical: 2),
                                           decoration: BoxDecoration(
-                                            color: const Color(0xFFFEF3C7),
+                                            color: const Color(0xFFFBF1DF),
                                             borderRadius: BorderRadius.circular(4),
                                             border: Border.all(
-                                                color: const Color(0xFFF59E0B)),
+                                                color: const Color(0xFFC98A1E)),
                                           ),
                                           child: Row(
                                             mainAxisSize: MainAxisSize.min,
@@ -938,7 +991,7 @@ class _MonitoringFormScreenState extends State<MonitoringFormScreen> {
                                               const Icon(
                                                 Icons.warning_amber_rounded,
                                                 size: 13,
-                                                color: Color(0xFFB45309),
+                                                color: Color(0xFF8A4F00),
                                               ),
                                               const SizedBox(width: 3),
                                               Text(
@@ -948,7 +1001,7 @@ class _MonitoringFormScreenState extends State<MonitoringFormScreen> {
                                                 style: const TextStyle(
                                                   fontSize: 10.5,
                                                   fontWeight: FontWeight.bold,
-                                                  color: Color(0xFFB45309),
+                                                  color: Color(0xFF8A4F00),
                                                 ),
                                               ),
                                             ],
@@ -988,7 +1041,7 @@ class _MonitoringFormScreenState extends State<MonitoringFormScreen> {
                             style: TextStyle(
                               fontSize: 13,
                               fontWeight: FontWeight.w600,
-                              color: isDark ? const Color(0xFFCBD5E1) : const Color(0xFF334155),
+                              color: isDark ? const Color(0xFFC0CDD3) : const Color(0xFF2B4650),
                             ),
                           ),
                           const SizedBox(height: 6),
@@ -1003,22 +1056,22 @@ class _MonitoringFormScreenState extends State<MonitoringFormScreen> {
                               contentPadding: const EdgeInsets.symmetric(
                                   horizontal: 12, vertical: 10),
                               filled: true,
-                              fillColor: isDark ? const Color(0xFF0F172A) : Colors.grey.shade100,
+                              fillColor: isDark ? const Color(0xFF0E222A) : Color(0xFFE9EFF1),
                               hintText: 'Auto-filled upon faculty selection',
                               hintStyle: TextStyle(
                                 fontSize: 12,
-                                color: isDark ? const Color(0xFF64748B) : Colors.grey.shade400,
+                                color: isDark ? const Color(0xFF5B6E76) : Color(0xFF8FA6AF),
                               ),
                               border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(8),
+                                borderRadius: BorderRadius.circular(5),
                                 borderSide: BorderSide(
-                                  color: isDark ? const Color(0xFF334155) : Colors.grey.shade300,
+                                  color: isDark ? const Color(0xFF2B4650) : Color(0xFFC0CDD3),
                                 ),
                               ),
                               enabledBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(8),
+                                borderRadius: BorderRadius.circular(5),
                                 borderSide: BorderSide(
-                                  color: isDark ? const Color(0xFF334155) : Colors.grey.shade300,
+                                  color: isDark ? const Color(0xFF2B4650) : Color(0xFFC0CDD3),
                                 ),
                               ),
                             ),
@@ -1038,7 +1091,7 @@ class _MonitoringFormScreenState extends State<MonitoringFormScreen> {
                             style: TextStyle(
                               fontSize: 13,
                               fontWeight: FontWeight.w600,
-                              color: isDark ? const Color(0xFFCBD5E1) : const Color(0xFF334155),
+                              color: isDark ? const Color(0xFFC0CDD3) : const Color(0xFF2B4650),
                             ),
                           ),
                           const SizedBox(height: 6),
@@ -1053,22 +1106,22 @@ class _MonitoringFormScreenState extends State<MonitoringFormScreen> {
                               contentPadding: const EdgeInsets.symmetric(
                                   horizontal: 12, vertical: 10),
                               filled: true,
-                              fillColor: isDark ? const Color(0xFF0F172A) : Colors.grey.shade100,
+                              fillColor: isDark ? const Color(0xFF0E222A) : Color(0xFFE9EFF1),
                               hintText: 'Auto-filled upon faculty selection',
                               hintStyle: TextStyle(
                                 fontSize: 12,
-                                color: isDark ? const Color(0xFF64748B) : Colors.grey.shade400,
+                                color: isDark ? const Color(0xFF5B6E76) : Color(0xFF8FA6AF),
                               ),
                               border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(8),
+                                borderRadius: BorderRadius.circular(5),
                                 borderSide: BorderSide(
-                                  color: isDark ? const Color(0xFF334155) : Colors.grey.shade300,
+                                  color: isDark ? const Color(0xFF2B4650) : Color(0xFFC0CDD3),
                                 ),
                               ),
                               enabledBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(8),
+                                borderRadius: BorderRadius.circular(5),
                                 borderSide: BorderSide(
-                                  color: isDark ? const Color(0xFF334155) : Colors.grey.shade300,
+                                  color: isDark ? const Color(0xFF2B4650) : Color(0xFFC0CDD3),
                                 ),
                               ),
                             ),
@@ -1088,7 +1141,7 @@ class _MonitoringFormScreenState extends State<MonitoringFormScreen> {
                             style: TextStyle(
                               fontSize: 13,
                               fontWeight: FontWeight.w600,
-                              color: isDark ? const Color(0xFFCBD5E1) : const Color(0xFF334155),
+                              color: isDark ? const Color(0xFFC0CDD3) : const Color(0xFF2B4650),
                             ),
                           ),
                           const SizedBox(height: 6),
@@ -1101,7 +1154,7 @@ class _MonitoringFormScreenState extends State<MonitoringFormScreen> {
                               contentPadding: const EdgeInsets.symmetric(
                                   horizontal: 12, vertical: 10),
                               border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(8),
+                                borderRadius: BorderRadius.circular(5),
                               ),
                             ),
                             items: schemeList.map((s) {
@@ -1134,7 +1187,7 @@ class _MonitoringFormScreenState extends State<MonitoringFormScreen> {
                             style: TextStyle(
                               fontSize: 13,
                               fontWeight: FontWeight.w600,
-                              color: isDark ? const Color(0xFFCBD5E1) : const Color(0xFF334155),
+                              color: isDark ? const Color(0xFFC0CDD3) : const Color(0xFF2B4650),
                             ),
                           ),
                           const SizedBox(height: 6),
@@ -1151,7 +1204,7 @@ class _MonitoringFormScreenState extends State<MonitoringFormScreen> {
                               contentPadding: const EdgeInsets.symmetric(
                                   horizontal: 12, vertical: 10),
                               border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(8),
+                                borderRadius: BorderRadius.circular(5),
                               ),
                             ),
                             items: courseList.map((code) {
@@ -1202,7 +1255,7 @@ class _MonitoringFormScreenState extends State<MonitoringFormScreen> {
                             style: TextStyle(
                               fontSize: 13,
                               fontWeight: FontWeight.w600,
-                              color: isDark ? const Color(0xFFCBD5E1) : const Color(0xFF334155),
+                              color: isDark ? const Color(0xFFC0CDD3) : const Color(0xFF2B4650),
                             ),
                           ),
                           const SizedBox(height: 6),
@@ -1214,7 +1267,7 @@ class _MonitoringFormScreenState extends State<MonitoringFormScreen> {
                               contentPadding: const EdgeInsets.symmetric(
                                   horizontal: 12, vertical: 10),
                               border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(8),
+                                borderRadius: BorderRadius.circular(5),
                               ),
                             ),
                             items: const [
@@ -1242,7 +1295,7 @@ class _MonitoringFormScreenState extends State<MonitoringFormScreen> {
                             style: TextStyle(
                               fontSize: 13,
                               fontWeight: FontWeight.w600,
-                              color: isDark ? const Color(0xFFCBD5E1) : const Color(0xFF334155),
+                              color: isDark ? const Color(0xFFC0CDD3) : const Color(0xFF2B4650),
                             ),
                           ),
                           const SizedBox(height: 6),
@@ -1254,7 +1307,7 @@ class _MonitoringFormScreenState extends State<MonitoringFormScreen> {
                               contentPadding: const EdgeInsets.symmetric(
                                   horizontal: 12, vertical: 10),
                               border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(8),
+                                borderRadius: BorderRadius.circular(5),
                               ),
                             ),
                             items: const [
@@ -1282,7 +1335,7 @@ class _MonitoringFormScreenState extends State<MonitoringFormScreen> {
                             style: TextStyle(
                               fontSize: 13,
                               fontWeight: FontWeight.w600,
-                              color: isDark ? const Color(0xFFCBD5E1) : const Color(0xFF334155),
+                              color: isDark ? const Color(0xFFC0CDD3) : const Color(0xFF2B4650),
                             ),
                           ),
                           const SizedBox(height: 6),
@@ -1294,7 +1347,7 @@ class _MonitoringFormScreenState extends State<MonitoringFormScreen> {
                               contentPadding: const EdgeInsets.symmetric(
                                   horizontal: 12, vertical: 10),
                               border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(8),
+                                borderRadius: BorderRadius.circular(5),
                               ),
                             ),
                             items: const [
@@ -1322,7 +1375,7 @@ class _MonitoringFormScreenState extends State<MonitoringFormScreen> {
                             style: TextStyle(
                               fontSize: 13,
                               fontWeight: FontWeight.w600,
-                              color: isDark ? const Color(0xFFCBD5E1) : const Color(0xFF334155),
+                              color: isDark ? const Color(0xFFC0CDD3) : const Color(0xFF2B4650),
                             ),
                           ),
                           const SizedBox(height: 6),
@@ -1334,7 +1387,7 @@ class _MonitoringFormScreenState extends State<MonitoringFormScreen> {
                               contentPadding: const EdgeInsets.symmetric(
                                   horizontal: 12, vertical: 10),
                               border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(8),
+                                borderRadius: BorderRadius.circular(5),
                               ),
                             ),
                             items: const [
@@ -1368,7 +1421,7 @@ class _MonitoringFormScreenState extends State<MonitoringFormScreen> {
                             style: TextStyle(
                               fontSize: 13,
                               fontWeight: FontWeight.w600,
-                              color: isDark ? const Color(0xFFCBD5E1) : const Color(0xFF334155),
+                              color: isDark ? const Color(0xFFC0CDD3) : const Color(0xFF2B4650),
                             ),
                           ),
                           const SizedBox(height: 6),
@@ -1380,7 +1433,7 @@ class _MonitoringFormScreenState extends State<MonitoringFormScreen> {
                               contentPadding: const EdgeInsets.symmetric(
                                   horizontal: 12, vertical: 10),
                               border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(8),
+                                borderRadius: BorderRadius.circular(5),
                               ),
                             ),
                             items: const [

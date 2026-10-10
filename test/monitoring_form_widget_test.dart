@@ -20,12 +20,9 @@ void main() {
       ),
     );
 
-    // Verify exact option name requested by user
-    expect(
-      find.text(
-          'Internal Institute Monitoring Format Internal Institute Monitoring Format'),
-      findsOneWidget,
-    );
+    // Verify welcome heading and available formats section in UserHomeScreen
+    expect(find.text('Welcome, Faculty Member / Staff'), findsOneWidget);
+    expect(find.text('Available Monitoring Formats'), findsOneWidget);
   });
 
   testWidgets(
@@ -53,14 +50,15 @@ void main() {
     expect(find.text('3rd Year (5th & 6th Sem) Weeks'), findsOneWidget);
     expect(find.text('No. of Data to Fill Out'), findsOneWidget);
 
-    // Initial rows should be Row #1 and Row #2
+    // Initial row should be Row #1
     expect(find.text('Row #1 - Faculty Entry'), findsOneWidget);
+
+    // Scroll to reveal Row #2
+    await tester.drag(find.byType(ListView), const Offset(0, -300));
+    await tester.pumpAndSettle();
     expect(find.text('Row #2 - Faculty Entry'), findsOneWidget);
 
-    // Scroll ListView to reveal the save button
-    await tester.drag(find.byType(ListView), const Offset(0, -600));
-    await tester.pumpAndSettle();
-
+    // Save button is fixed in bottomNavigationBar
     final saveBtn = find.text('Save Monitoring Form (2 Entries)');
     expect(saveBtn, findsOneWidget);
   });
@@ -135,26 +133,21 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // Verify Admin can also see the exact requested format title
-    expect(
-      find.text(
-          'Internal Institute Monitoring Format Internal Institute Monitoring Format'),
-      findsOneWidget,
-    );
-    expect(find.text('Fill Form'), findsOneWidget);
+    // Verify Admin heading
+    expect(find.text('Administrator Functions'), findsOneWidget);
     expect(find.text('Export docx'), findsWidgets);
   });
 
   testWidgets(
       'AdminDashboardScreen clicking Export docx opens custom location options sheet',
       (WidgetTester tester) async {
-    tester.view.physicalSize = const Size(1280, 1024);
+    tester.view.physicalSize = const Size(1600, 1600);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
 
     final appState = AppState();
     appState.loadSampleDemoData();
-    appState.saveSubmission(
+    await appState.saveSubmission(
       MonitoringSubmission(
         id: 'TEST-ADMIN-1',
         programName: 'Computer Technology',
@@ -184,7 +177,8 @@ void main() {
     await tester.pumpAndSettle();
 
     final exportBtn = find.text('Export docx').first;
-    await tester.ensureVisible(exportBtn);
+    await tester.drag(find.byType(ListView).last, const Offset(0, -300));
+    await tester.pumpAndSettle();
     await tester.tap(exportBtn);
     await tester.pumpAndSettle();
 
@@ -224,6 +218,10 @@ void main() {
     // In Row #1, the selected faculty is now Prof. A. B. Chaudhari
     expect(find.text('Prof. A. B. Chaudhari'), findsOneWidget);
 
+    // Scroll down to reveal Row #2
+    await tester.drag(find.byType(ListView), const Offset(0, -300));
+    await tester.pumpAndSettle();
+
     // Now open Row #2's faculty dropdown
     final facultyDropdownRow2 = find.text('Select Faculty').first;
     await tester.ensureVisible(facultyDropdownRow2);
@@ -244,6 +242,7 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
 
     final appState = AppState();
+    appState.setRole(AppRole.superAdmin);
     appState.loadSampleDemoData();
 
     await tester.pumpWidget(
@@ -255,11 +254,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // Open catalog dialog via Navigation Drawer
-    final profileLeading = find.byIcon(Icons.person).first;
-    await tester.tap(profileLeading);
-    await tester.pumpAndSettle();
-
+    // Open catalog dialog via persistent Navigation Sidebar
     final viewCatalogTile = find.text('Active Catalog');
     await tester.tap(viewCatalogTile);
     await tester.pumpAndSettle();
@@ -289,7 +284,7 @@ void main() {
   });
 
   testWidgets(
-      'UserHomeScreen renders new dashboard title and opens Navigation Drawer with User profile & Logout',
+      'UserHomeScreen renders new dashboard title and Navigation Sidebar with User profile & Logout',
       (WidgetTester tester) async {
     tester.view.physicalSize = const Size(1280, 1024);
     tester.view.devicePixelRatio = 1.0;
@@ -306,20 +301,9 @@ void main() {
     await tester.pumpAndSettle();
 
     // Verify AppBar title
-    expect(
-      find.text('K.K. Wagh Polytechnic, Nashik - User Dashboard'),
-      findsOneWidget,
-    );
+    expect(find.text('User Dashboard'), findsOneWidget);
 
-    // Profile picture circle on AppBar
-    final profileLeading = find.byIcon(Icons.person).first;
-    expect(profileLeading, findsOneWidget);
-
-    // Tap profile picture to open drawer
-    await tester.tap(profileLeading);
-    await tester.pumpAndSettle();
-
-    // Verify drawer contents for User
+    // Verify persistent sidebar contents for User
     expect(find.text('Faculty Member'), findsOneWidget);
     expect(find.text('Authority: User'), findsOneWidget);
     expect(find.text('Settings'), findsOneWidget);
@@ -330,7 +314,7 @@ void main() {
   });
 
   testWidgets(
-      'AdminDashboardScreen opens Navigation Drawer with Admin profile, Create User, and Excel Upload Dialog',
+      'AdminDashboardScreen opens Navigation Sidebar with Admin profile, Create User, and Excel Upload Dialog',
       (WidgetTester tester) async {
     tester.view.physicalSize = const Size(1280, 1024);
     tester.view.devicePixelRatio = 1.0;
@@ -347,17 +331,9 @@ void main() {
     await tester.pumpAndSettle();
 
     // Verify AppBar title
-    expect(
-      find.text('K.K. Wagh Polytechnic, Nashik - Admin Dashboard'),
-      findsOneWidget,
-    );
+    expect(find.text('Admin Dashboard'), findsOneWidget);
 
-    // Tap profile picture to open drawer
-    final profileLeading = find.byIcon(Icons.person).first;
-    await tester.tap(profileLeading);
-    await tester.pumpAndSettle();
-
-    // Verify drawer contents for Admin
+    // Verify persistent sidebar contents for Admin
     expect(find.text('Administrator'), findsOneWidget);
     expect(find.text('Authority: Admin'), findsOneWidget);
     expect(find.text('Upload Excel Sheets'), findsOneWidget);
@@ -380,10 +356,6 @@ void main() {
     await tester.tap(find.text('Cancel'));
     await tester.pumpAndSettle();
 
-    // Reopen drawer
-    await tester.tap(profileLeading);
-    await tester.pumpAndSettle();
-
     // Tap 'Upload Excel Sheets' to open Excel Upload Dialog
     await tester.tap(find.text('Upload Excel Sheets'));
     await tester.pumpAndSettle();
@@ -392,7 +364,6 @@ void main() {
     expect(find.text('Excel Uploads & Catalog'), findsOneWidget);
     expect(find.text('Faculty & Program Master Sheet'), findsOneWidget);
     expect(find.text('Subject & Curriculum Master Sheet'), findsOneWidget);
-    expect(find.text('View Active Catalog & Filters'), findsNothing);
 
     // Close Excel dialog
     await tester.tap(find.text('Close'));
@@ -402,14 +373,14 @@ void main() {
   testWidgets(
       'UserHomeScreen displays Export docx button and clicking it opens export options sheet',
       (WidgetTester tester) async {
-    tester.view.physicalSize = const Size(1280, 1024);
+    tester.view.physicalSize = const Size(1600, 1200);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
 
     final appState = AppState();
     appState.loadSampleDemoData();
     appState.setRole(AppRole.user);
-    appState.saveSubmission(
+    await appState.saveSubmission(
       MonitoringSubmission(
         id: 'TEST-USER-1',
         programName: 'Computer Technology',

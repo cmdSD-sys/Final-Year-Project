@@ -2,6 +2,7 @@ import 'dart:typed_data';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import '../services/app_state.dart';
+import '../theme/app_theme.dart';
 import '../services/docx_service.dart';
 import '../services/excel_service.dart';
 import '../utils/app_snack_bar.dart';
@@ -37,26 +38,19 @@ class _ExcelUploadDialogState extends State<ExcelUploadDialog> {
       final file = files.first;
       final bytes = await file.readAsBytes();
 
-      final parseResult = ExcelService.parseFacultySheet(bytes);
-      if (parseResult.error != null) {
-        if (!mounted) return;
-        AppSnackBar.showError(context, parseResult.error!);
-        return;
-      }
-
-      widget.appState.updateFacultyAndPrograms(
-        newPrograms: parseResult.programs,
-        newFaculties: parseResult.faculties,
-      );
+      await widget.appState.uploadFacultyExcel(bytes, file.name);
 
       if (!mounted) return;
       AppSnackBar.showSuccess(
         context,
-        'Successfully loaded ${parseResult.faculties.length} faculties across ${parseResult.programs.length} programs!',
+        'Successfully processed and updated Faculty & Program catalog!',
       );
     } catch (e) {
       if (!mounted) return;
-      AppSnackBar.showError(context, 'Upload failed: $e');
+      AppSnackBar.showError(
+        context,
+        e.toString().replaceAll('ApiException: ', '').replaceAll('Exception: ', ''),
+      );
     } finally {
       if (mounted) setState(() => _isUploadingFaculty = false);
     }
@@ -75,28 +69,18 @@ class _ExcelUploadDialogState extends State<ExcelUploadDialog> {
       final file = files.first;
       final bytes = await file.readAsBytes();
 
-      final courses = ExcelService.parseSubjectSheet(bytes);
-      if (courses.isEmpty) {
-        if (!mounted) return;
-        AppSnackBar.showError(
-          context,
-          'No courses found in the uploaded sheet.',
-        );
-        return;
-      }
-
-      widget.appState.updateCourses(courses);
+      await widget.appState.uploadCourseExcel(bytes, file.name);
 
       if (!mounted) return;
       AppSnackBar.showSuccess(
         context,
-        'Successfully loaded ${courses.length} courses / subjects into curriculum catalog!',
+        'Successfully processed and updated Subject Curriculum catalog!',
       );
     } catch (e) {
       if (!mounted) return;
       AppSnackBar.showError(
         context,
-        'Upload failed: $e',
+        e.toString().replaceAll('ApiException: ', '').replaceAll('Exception: ', ''),
       );
     } finally {
       if (mounted) setState(() => _isUploadingSubject = false);
@@ -154,9 +138,9 @@ class _ExcelUploadDialogState extends State<ExcelUploadDialog> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final cardBg = isDark ? const Color(0xFF1E293B) : Colors.white;
-    final textColor = isDark ? Colors.white : const Color(0xFF0F172A);
-    final borderColor = isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1);
+    final cardBg = Pal.of(context).surface;
+    final textColor = Pal.of(context).ink;
+    final borderColor = Pal.of(context).rule;
 
     return ListenableBuilder(
       listenable: widget.appState,
@@ -168,34 +152,21 @@ class _ExcelUploadDialogState extends State<ExcelUploadDialog> {
         return AlertDialog(
           backgroundColor: cardBg,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(18),
+            borderRadius: BorderRadius.circular(10),
             side: BorderSide(color: borderColor),
           ),
           title: Row(
             children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: isDark
-                      ? const Color(0xFF3B82F6).withValues(alpha: 0.2)
-                      : const Color(0xFFEFF6FF),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(
+              Icon(
                   Icons.upload_file,
-                  color: isDark ? const Color(0xFF60A5FA) : const Color(0xFF1E3A8A),
+                  color: isDark ? const Color(0xFF5DB8DB) : const Color(0xFF0B6A90),
                   size: 22,
                 ),
-              ),
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
                   'Excel Uploads & Catalog',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: textColor,
-                  ),
+                  style: AppType.display(textColor, size: 22, height: 1.2),
                 ),
               ),
             ],
@@ -211,7 +182,7 @@ class _ExcelUploadDialogState extends State<ExcelUploadDialog> {
                     'Upload institutional master Excel data sheets for faculty, department programs, and course curriculum contact hours.',
                     style: TextStyle(
                       fontSize: 13,
-                      color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                      color: isDark ? const Color(0xFF8FA6AF) : const Color(0xFF5B6E76),
                     ),
                   ),
                   const SizedBox(height: 18),
@@ -220,8 +191,8 @@ class _ExcelUploadDialogState extends State<ExcelUploadDialog> {
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
-                      borderRadius: BorderRadius.circular(14),
+                      color: isDark ? const Color(0xFF0E222A) : const Color(0xFFF3F6F7),
+                      borderRadius: BorderRadius.circular(6),
                       border: Border.all(color: borderColor),
                     ),
                     child: Column(
@@ -229,7 +200,7 @@ class _ExcelUploadDialogState extends State<ExcelUploadDialog> {
                       children: [
                         Row(
                           children: [
-                            const Icon(Icons.people_alt, color: Color(0xFF2563EB), size: 20),
+                            const Icon(Icons.people_alt, color: Color(0xFF1281B0), size: 20),
                             const SizedBox(width: 8),
                             Expanded(
                               child: Text(
@@ -245,15 +216,15 @@ class _ExcelUploadDialogState extends State<ExcelUploadDialog> {
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                               decoration: BoxDecoration(
-                                color: facultiesCount > 0 ? Colors.green.withValues(alpha: 0.15) : Colors.grey.withValues(alpha: 0.15),
-                                borderRadius: BorderRadius.circular(6),
+                                color: facultiesCount > 0 ? Color(0xFF1F7A4D).withValues(alpha: 0.15) : Color(0xFF74868D).withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(4),
                               ),
                               child: Text(
                                 '$facultiesCount Faculties • $programsCount Depts',
                                 style: TextStyle(
                                   fontSize: 11,
                                   fontWeight: FontWeight.bold,
-                                  color: facultiesCount > 0 ? Colors.green : Colors.grey,
+                                  color: facultiesCount > 0 ? Color(0xFF1F7A4D) : Color(0xFF74868D),
                                 ),
                               ),
                             ),
@@ -264,7 +235,7 @@ class _ExcelUploadDialogState extends State<ExcelUploadDialog> {
                           'Columns: Program Name, Program Code, Faculty Name, Qualification, Approval Status.',
                           style: TextStyle(
                             fontSize: 12,
-                            color: isDark ? const Color(0xFF94A3B8) : Colors.grey.shade600,
+                            color: isDark ? const Color(0xFF8FA6AF) : Color(0xFF5B6E76),
                           ),
                         ),
                         const SizedBox(height: 12),
@@ -272,10 +243,10 @@ class _ExcelUploadDialogState extends State<ExcelUploadDialog> {
                           children: [
                             ElevatedButton.icon(
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF1E3A8A),
+                                backgroundColor: const Color(0xFF0B6A90),
                                 foregroundColor: Colors.white,
                                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(5)),
                               ),
                               onPressed: _isUploadingFaculty ? null : _uploadFacultyExcel,
                               icon: _isUploadingFaculty
@@ -291,7 +262,7 @@ class _ExcelUploadDialogState extends State<ExcelUploadDialog> {
                             OutlinedButton.icon(
                               style: OutlinedButton.styleFrom(
                                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(5)),
                               ),
                               onPressed: _downloadSampleFacultyTemplate,
                               icon: const Icon(Icons.download, size: 16),
@@ -309,8 +280,8 @@ class _ExcelUploadDialogState extends State<ExcelUploadDialog> {
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
-                      borderRadius: BorderRadius.circular(14),
+                      color: isDark ? const Color(0xFF0E222A) : const Color(0xFFF3F6F7),
+                      borderRadius: BorderRadius.circular(6),
                       border: Border.all(color: borderColor),
                     ),
                     child: Column(
@@ -318,7 +289,7 @@ class _ExcelUploadDialogState extends State<ExcelUploadDialog> {
                       children: [
                         Row(
                           children: [
-                            const Icon(Icons.library_books, color: Color(0xFF0D9488), size: 20),
+                            const Icon(Icons.library_books, color: Color(0xFF0B6A90), size: 20),
                             const SizedBox(width: 8),
                             Expanded(
                               child: Text(
@@ -334,15 +305,15 @@ class _ExcelUploadDialogState extends State<ExcelUploadDialog> {
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                               decoration: BoxDecoration(
-                                color: coursesCount > 0 ? Colors.teal.withValues(alpha: 0.15) : Colors.grey.withValues(alpha: 0.15),
-                                borderRadius: BorderRadius.circular(6),
+                                color: coursesCount > 0 ? Color(0xFF0B6A90).withValues(alpha: 0.15) : Color(0xFF74868D).withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(4),
                               ),
                               child: Text(
                                 '$coursesCount Subjects Loaded',
                                 style: TextStyle(
                                   fontSize: 11,
                                   fontWeight: FontWeight.bold,
-                                  color: coursesCount > 0 ? const Color(0xFF0D9488) : Colors.grey,
+                                  color: coursesCount > 0 ? const Color(0xFF0B6A90) : Color(0xFF74868D),
                                 ),
                               ),
                             ),
@@ -353,7 +324,7 @@ class _ExcelUploadDialogState extends State<ExcelUploadDialog> {
                           'Columns: Program Code, Semester (1-6), Course Code & Abbreviation, Prescribed Hrs (TH, PR, TU).',
                           style: TextStyle(
                             fontSize: 12,
-                            color: isDark ? const Color(0xFF94A3B8) : Colors.grey.shade600,
+                            color: isDark ? const Color(0xFF8FA6AF) : Color(0xFF5B6E76),
                           ),
                         ),
                         const SizedBox(height: 12),
@@ -361,10 +332,10 @@ class _ExcelUploadDialogState extends State<ExcelUploadDialog> {
                           children: [
                             ElevatedButton.icon(
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF0F766E),
+                                backgroundColor: const Color(0xFF0B6A90),
                                 foregroundColor: Colors.white,
                                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(5)),
                               ),
                               onPressed: _isUploadingSubject ? null : _uploadSubjectExcel,
                               icon: _isUploadingSubject
@@ -380,7 +351,7 @@ class _ExcelUploadDialogState extends State<ExcelUploadDialog> {
                             OutlinedButton.icon(
                               style: OutlinedButton.styleFrom(
                                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(5)),
                               ),
                               onPressed: _downloadSampleSubjectTemplate,
                               icon: const Icon(Icons.download, size: 16),

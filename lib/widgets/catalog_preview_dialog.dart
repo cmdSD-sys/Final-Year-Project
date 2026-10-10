@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/app_state.dart';
+import '../theme/app_theme.dart';
+import '../utils/app_snack_bar.dart';
 
 class CatalogPreviewDialog extends StatefulWidget {
   final AppState appState;
@@ -16,14 +18,171 @@ class _CatalogPreviewDialogState extends State<CatalogPreviewDialog> {
   int? _selectedCourseSemester; // null means 'All Semesters'
 
   @override
+  void initState() {
+    super.initState();
+    final isSuper = widget.appState.isSuperAdmin;
+    final userDept = widget.appState.currentUserDepartment;
+    if (!isSuper && userDept != null && userDept.trim().isNotEmpty) {
+      _selectedFacultyDept = userDept.trim().toUpperCase();
+      _selectedCourseDept = userDept.trim().toUpperCase();
+    }
+  }
+
+  Future<void> _handleClearFaculties() async {
+    final targetDept = _selectedFacultyDept;
+    final deptName = targetDept != null ? 'department "$targetDept"' : 'ALL departments';
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        final isDark = Theme.of(ctx).brightness == Brightness.dark;
+        return AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.warning_amber_rounded, color: Color(0xFFB3261E), size: 24),
+              SizedBox(width: 8),
+              Text(
+                'Clear Faculty Catalog?',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
+          content: Text(
+            'Are you sure you want to permanently clear all faculties for $deptName?\n\n'
+            'This action cannot be undone. You will need to upload an updated Excel sheet to restore faculty records.',
+            style: TextStyle(
+              fontSize: 13.5,
+              color: isDark ? const Color(0xFFC0CDD3) : const Color(0xFF2B4650),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFB3261E),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(5)),
+              ),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Clear Faculties'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed != true) return;
+
+    try {
+      final count = await widget.appState.clearFaculties(programCode: targetDept);
+      if (!mounted) return;
+      AppSnackBar.showSuccess(
+        context,
+        'Successfully cleared $count faculties for $deptName!',
+      );
+      setState(() {});
+    } catch (e) {
+      if (!mounted) return;
+      AppSnackBar.showError(
+        context,
+        e.toString().replaceAll('ApiException: ', ''),
+      );
+    }
+  }
+
+  Future<void> _handleClearCourses() async {
+    final targetDept = _selectedCourseDept;
+    final deptName = targetDept != null ? 'department "$targetDept"' : 'ALL departments';
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        final isDark = Theme.of(ctx).brightness == Brightness.dark;
+        return AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.warning_amber_rounded, color: Color(0xFFB3261E), size: 24),
+              SizedBox(width: 8),
+              Text(
+                'Clear Course Catalog?',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
+          content: Text(
+            'Are you sure you want to permanently clear all courses/curriculum for $deptName?\n\n'
+            'This action cannot be undone. You will need to upload an updated Excel sheet to restore curriculum subjects.',
+            style: TextStyle(
+              fontSize: 13.5,
+              color: isDark ? const Color(0xFFC0CDD3) : const Color(0xFF2B4650),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFB3261E),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(5)),
+              ),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Clear Courses'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed != true) return;
+
+    try {
+      final count = await widget.appState.clearCourses(programCode: targetDept);
+      if (!mounted) return;
+      AppSnackBar.showSuccess(
+        context,
+        'Successfully cleared $count courses for $deptName!',
+      );
+      setState(() {});
+    } catch (e) {
+      if (!mounted) return;
+      AppSnackBar.showError(
+        context,
+        e.toString().replaceAll('ApiException: ', ''),
+      );
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final dialogBg = isDark ? const Color(0xFF1E293B) : Colors.white;
-    final textColor = isDark ? Colors.white : const Color(0xFF0F172A);
-    final borderColor = isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0);
+    final dialogBg = Pal.of(context).surface;
+    final textColor = Pal.of(context).ink;
+    final borderColor = Pal.of(context).rule;
+    final isSuper = widget.appState.isSuperAdmin;
+    final userDept = widget.appState.currentUserDepartment;
+
+    if (!isSuper && userDept != null && userDept.trim().isNotEmpty) {
+      _selectedFacultyDept = userDept.trim().toUpperCase();
+      _selectedCourseDept = userDept.trim().toUpperCase();
+    }
+
     final programs = widget.appState.programs;
-    final allFaculties = widget.appState.faculties;
-    final allCourses = widget.appState.courses;
+    final allFaculties = (!isSuper && userDept != null && userDept.trim().isNotEmpty)
+        ? widget.appState.faculties
+            .where((f) => f.programCode.trim().toUpperCase() == userDept.trim().toUpperCase())
+            .toList()
+        : widget.appState.faculties;
+    final allCourses = (!isSuper && userDept != null && userDept.trim().isNotEmpty)
+        ? widget.appState.courses
+            .where((c) => c.programCode.trim().toUpperCase() == userDept.trim().toUpperCase())
+            .toList()
+        : widget.appState.courses;
 
     // Filter faculties
     final filteredFaculties = _selectedFacultyDept == null
@@ -62,25 +221,21 @@ class _CatalogPreviewDialogState extends State<CatalogPreviewDialog> {
     return AlertDialog(
       backgroundColor: dialogBg,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(10),
         side: BorderSide(color: borderColor),
       ),
       title: Row(
         children: [
           Icon(
             Icons.menu_book,
-            color: isDark ? const Color(0xFF60A5FA) : const Color(0xFF1E3A8A),
+            color: isDark ? const Color(0xFF5DB8DB) : const Color(0xFF0B6A90),
             size: 24,
           ),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
               'Active Curriculum & Faculty Catalog',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 18,
-                color: textColor,
-              ),
+              style: AppType.display(textColor, size: 22, height: 1.2),
             ),
           ),
         ],
@@ -93,9 +248,9 @@ class _CatalogPreviewDialogState extends State<CatalogPreviewDialog> {
           child: Column(
             children: [
               TabBar(
-                labelColor: isDark ? const Color(0xFF60A5FA) : const Color(0xFF1E3A8A),
-                unselectedLabelColor: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
-                indicatorColor: isDark ? const Color(0xFF60A5FA) : const Color(0xFF1E3A8A),
+                labelColor: isDark ? const Color(0xFF5DB8DB) : const Color(0xFF0B6A90),
+                unselectedLabelColor: isDark ? const Color(0xFF8FA6AF) : const Color(0xFF5B6E76),
+                indicatorColor: isDark ? const Color(0xFF5DB8DB) : const Color(0xFF0B6A90),
                 tabs: const [
                   Tab(
                     icon: Icon(Icons.people, size: 18),
@@ -126,17 +281,24 @@ class _CatalogPreviewDialogState extends State<CatalogPreviewDialog> {
                                   labelText: 'Filter Department',
                                   prefixIcon:
                                       const Icon(Icons.filter_alt, size: 18),
+                                  suffixIcon: !isSuper
+                                      ? const Tooltip(
+                                          message: 'Locked to your department',
+                                          child: Icon(Icons.lock_outline, size: 16),
+                                        )
+                                      : null,
                                   contentPadding: const EdgeInsets.symmetric(
                                       horizontal: 12, vertical: 8),
                                   border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(8)),
+                                      borderRadius: BorderRadius.circular(5)),
                                 ),
                                 items: [
-                                  const DropdownMenuItem<String?>(
-                                    value: null,
-                                    child:
-                                        Text('All Departments (All Faculties)'),
-                                  ),
+                                  if (isSuper)
+                                    const DropdownMenuItem<String?>(
+                                      value: null,
+                                      child:
+                                          Text('All Departments (All Faculties)'),
+                                    ),
                                   ...programs.map((p) {
                                     return DropdownMenuItem<String?>(
                                       value: p.code,
@@ -144,9 +306,11 @@ class _CatalogPreviewDialogState extends State<CatalogPreviewDialog> {
                                     );
                                   }),
                                 ],
-                                onChanged: (val) {
-                                  setState(() => _selectedFacultyDept = val);
-                                },
+                                onChanged: !isSuper
+                                    ? null
+                                    : (val) {
+                                        setState(() => _selectedFacultyDept = val);
+                                      },
                               ),
                             ),
                             const SizedBox(width: 12),
@@ -155,13 +319,13 @@ class _CatalogPreviewDialogState extends State<CatalogPreviewDialog> {
                                   horizontal: 10, vertical: 8),
                               decoration: BoxDecoration(
                                 color: isDark
-                                    ? const Color(0xFF2563EB).withValues(alpha: 0.2)
-                                    : Colors.blue.shade50,
-                                borderRadius: BorderRadius.circular(8),
+                                    ? const Color(0xFF1281B0).withValues(alpha: 0.2)
+                                    : Color(0xFFE3F0F5),
+                                borderRadius: BorderRadius.circular(5),
                                 border: Border.all(
                                   color: isDark
-                                      ? const Color(0xFF3B82F6).withValues(alpha: 0.4)
-                                      : Colors.blue.shade200,
+                                      ? const Color(0xFF2E93BD).withValues(alpha: 0.4)
+                                      : Color(0xFFB5D9E8),
                                 ),
                               ),
                               child: Text(
@@ -169,10 +333,32 @@ class _CatalogPreviewDialogState extends State<CatalogPreviewDialog> {
                                 style: TextStyle(
                                   fontWeight: FontWeight.bold,
                                   fontSize: 13,
-                                  color: isDark ? const Color(0xFF93C5FD) : Colors.blue.shade900,
+                                  color: isDark ? const Color(0xFF9BD0E6) : Color(0xFF084E6B),
                                 ),
                               ),
                             ),
+                            if (widget.appState.isAdminOrSuper) ...[
+                              const SizedBox(width: 8),
+                              Tooltip(
+                                message: _selectedFacultyDept != null
+                                    ? 'Clear faculties for $_selectedFacultyDept'
+                                    : 'Clear all faculties',
+                                child: OutlinedButton.icon(
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: const Color(0xFFB3261E),
+                                    side: const BorderSide(color: Color(0xFFC7443A)),
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(5)),
+                                  ),
+                                  icon: const Icon(Icons.delete_sweep, size: 16),
+                                  label: Text(
+                                    _selectedFacultyDept != null ? 'Clear ($_selectedFacultyDept)' : 'Clear All',
+                                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                                  ),
+                                  onPressed: _handleClearFaculties,
+                                ),
+                              ),
+                            ],
                           ],
                         ),
                         const SizedBox(height: 8),
@@ -186,13 +372,13 @@ class _CatalogPreviewDialogState extends State<CatalogPreviewDialog> {
                                       Icon(
                                         Icons.person_off,
                                         size: 48,
-                                        color: isDark ? const Color(0xFF64748B) : Colors.grey.shade400,
+                                        color: isDark ? const Color(0xFF5B6E76) : Color(0xFF8FA6AF),
                                       ),
                                       const SizedBox(height: 8),
                                       Text(
                                         'No faculty loaded for ${_selectedFacultyDept ?? "selected filter"}.',
                                         style: TextStyle(
-                                          color: isDark ? const Color(0xFF94A3B8) : Colors.grey.shade600,
+                                          color: isDark ? const Color(0xFF8FA6AF) : Color(0xFF5B6E76),
                                         ),
                                       ),
                                     ],
@@ -210,7 +396,7 @@ class _CatalogPreviewDialogState extends State<CatalogPreviewDialog> {
                                       leading: CircleAvatar(
                                         radius: 15,
                                         backgroundColor:
-                                            const Color(0xFF1E3A8A),
+                                            const Color(0xFF0B6A90),
                                         child: Text(
                                           f.programCode,
                                           style: const TextStyle(
@@ -230,18 +416,18 @@ class _CatalogPreviewDialogState extends State<CatalogPreviewDialog> {
                                       subtitle: Text(
                                         '${f.qualification} • ${f.approvalStatus}',
                                         style: TextStyle(
-                                          color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                                          color: isDark ? const Color(0xFF8FA6AF) : const Color(0xFF5B6E76),
                                         ),
                                       ),
                                       trailing: Chip(
                                         padding: EdgeInsets.zero,
-                                        backgroundColor: isDark ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9),
+                                        backgroundColor: isDark ? const Color(0xFF0E222A) : const Color(0xFFE9EFF1),
                                         side: BorderSide(color: borderColor),
                                         label: Text(
                                           f.programCode,
                                           style: TextStyle(
                                             fontSize: 11,
-                                            color: isDark ? const Color(0xFF93C5FD) : const Color(0xFF1E3A8A),
+                                            color: isDark ? const Color(0xFF9BD0E6) : const Color(0xFF0B6A90),
                                           ),
                                         ),
                                       ),
@@ -269,17 +455,24 @@ class _CatalogPreviewDialogState extends State<CatalogPreviewDialog> {
                                   labelText: '1. Select Department',
                                   prefixIcon:
                                       const Icon(Icons.school, size: 18),
+                                  suffixIcon: !isSuper
+                                      ? const Tooltip(
+                                          message: 'Locked to your department',
+                                          child: Icon(Icons.lock_outline, size: 16),
+                                        )
+                                      : null,
                                   contentPadding: const EdgeInsets.symmetric(
                                       horizontal: 12, vertical: 8),
                                   border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(8)),
+                                      borderRadius: BorderRadius.circular(5)),
                                 ),
                                 items: [
-                                  const DropdownMenuItem<String?>(
-                                    value: null,
-                                    child:
-                                        Text('All Departments (All Subjects)'),
-                                  ),
+                                  if (isSuper)
+                                    const DropdownMenuItem<String?>(
+                                      value: null,
+                                      child:
+                                          Text('All Departments (All Subjects)'),
+                                    ),
                                   ...programs.map((p) {
                                     return DropdownMenuItem<String?>(
                                       value: p.code,
@@ -287,13 +480,14 @@ class _CatalogPreviewDialogState extends State<CatalogPreviewDialog> {
                                     );
                                   }),
                                 ],
-                                onChanged: (val) {
-                                  setState(() {
-                                    _selectedCourseDept = val;
-                                    // Reset semester filter when department changes
-                                    _selectedCourseSemester = null;
-                                  });
-                                },
+                                onChanged: !isSuper
+                                    ? null
+                                    : (val) {
+                                        setState(() {
+                                          _selectedCourseDept = val;
+                                          _selectedCourseSemester = null;
+                                        });
+                                      },
                               ),
                             ),
                             // Second Filter: Semester-wise (Appears when department is selected!)
@@ -315,7 +509,7 @@ class _CatalogPreviewDialogState extends State<CatalogPreviewDialog> {
                                         horizontal: 12, vertical: 8),
                                     border: OutlineInputBorder(
                                         borderRadius:
-                                            BorderRadius.circular(8)),
+                                            BorderRadius.circular(5)),
                                   ),
                                   items: [
                                     const DropdownMenuItem<int?>(
@@ -345,13 +539,13 @@ class _CatalogPreviewDialogState extends State<CatalogPreviewDialog> {
                                   horizontal: 10, vertical: 8),
                               decoration: BoxDecoration(
                                 color: isDark
-                                    ? const Color(0xFF0F766E).withValues(alpha: 0.25)
-                                    : Colors.teal.shade50,
-                                borderRadius: BorderRadius.circular(8),
+                                    ? const Color(0xFF0B6A90).withValues(alpha: 0.25)
+                                    : Color(0xFFE3F0F5),
+                                borderRadius: BorderRadius.circular(5),
                                 border: Border.all(
                                   color: isDark
-                                      ? const Color(0xFF14B8A6).withValues(alpha: 0.4)
-                                      : Colors.teal.shade200,
+                                      ? const Color(0xFF2E93BD).withValues(alpha: 0.4)
+                                      : Color(0xFFB5D9E8),
                                 ),
                               ),
                               child: Text(
@@ -359,10 +553,32 @@ class _CatalogPreviewDialogState extends State<CatalogPreviewDialog> {
                                 style: TextStyle(
                                   fontWeight: FontWeight.bold,
                                   fontSize: 13,
-                                  color: isDark ? const Color(0xFF5EEAD4) : Colors.teal.shade900,
+                                  color: isDark ? const Color(0xFF5DB8DB) : Color(0xFF084E6B),
                                 ),
                               ),
                             ),
+                            if (widget.appState.isAdminOrSuper) ...[
+                              const SizedBox(width: 8),
+                              Tooltip(
+                                message: _selectedCourseDept != null
+                                    ? 'Clear courses for $_selectedCourseDept'
+                                    : 'Clear all courses',
+                                child: OutlinedButton.icon(
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: const Color(0xFFB3261E),
+                                    side: const BorderSide(color: Color(0xFFC7443A)),
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(5)),
+                                  ),
+                                  icon: const Icon(Icons.delete_sweep, size: 16),
+                                  label: Text(
+                                    _selectedCourseDept != null ? 'Clear ($_selectedCourseDept)' : 'Clear All',
+                                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                                  ),
+                                  onPressed: _handleClearCourses,
+                                ),
+                              ),
+                            ],
                           ],
                         ),
                         const SizedBox(height: 8),
@@ -376,13 +592,13 @@ class _CatalogPreviewDialogState extends State<CatalogPreviewDialog> {
                                       Icon(
                                         Icons.library_books,
                                         size: 48,
-                                        color: isDark ? const Color(0xFF64748B) : Colors.grey.shade400,
+                                        color: isDark ? const Color(0xFF5B6E76) : Color(0xFF8FA6AF),
                                       ),
                                       const SizedBox(height: 8),
                                       Text(
                                         'No subjects found for ${_selectedCourseDept ?? "all departments"}${_selectedCourseSemester != null ? " (Semester $_selectedCourseSemester)" : ""}.',
                                         style: TextStyle(
-                                          color: isDark ? const Color(0xFF94A3B8) : Colors.grey.shade600,
+                                          color: isDark ? const Color(0xFF8FA6AF) : Color(0xFF5B6E76),
                                         ),
                                       ),
                                     ],
@@ -400,14 +616,14 @@ class _CatalogPreviewDialogState extends State<CatalogPreviewDialog> {
                                       leading: CircleAvatar(
                                         radius: 15,
                                         backgroundColor: isDark
-                                            ? const Color(0xFF14B8A6).withValues(alpha: 0.3)
-                                            : Colors.teal.shade100,
+                                            ? const Color(0xFF2E93BD).withValues(alpha: 0.3)
+                                            : Color(0xFFCFE6F0),
                                         child: Text(
                                           '${c.programCode}${c.semester}',
                                           style: TextStyle(
                                             fontSize: 10,
                                             fontWeight: FontWeight.bold,
-                                            color: isDark ? const Color(0xFF5EEAD4) : Colors.teal.shade900,
+                                            color: isDark ? const Color(0xFF5DB8DB) : Color(0xFF084E6B),
                                           ),
                                         ),
                                       ),
@@ -421,7 +637,7 @@ class _CatalogPreviewDialogState extends State<CatalogPreviewDialog> {
                                       subtitle: Text(
                                         'Dept: ${c.programCode} • Sem: ${c.semester} • Prescribed Hrs: TH: ${c.thPrescribed} | PR: ${c.prPrescribed} | TU: ${c.tuPrescribed}',
                                         style: TextStyle(
-                                          color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                                          color: isDark ? const Color(0xFF8FA6AF) : const Color(0xFF5B6E76),
                                         ),
                                       ),
                                       trailing: Container(
@@ -429,14 +645,14 @@ class _CatalogPreviewDialogState extends State<CatalogPreviewDialog> {
                                             horizontal: 8, vertical: 3),
                                         decoration: BoxDecoration(
                                           color: isDark
-                                              ? const Color(0xFF0F766E).withValues(alpha: 0.25)
-                                              : Colors.teal.shade50,
+                                              ? const Color(0xFF0B6A90).withValues(alpha: 0.25)
+                                              : Color(0xFFE3F0F5),
                                           borderRadius:
-                                              BorderRadius.circular(6),
+                                              BorderRadius.circular(4),
                                           border: Border.all(
                                             color: isDark
-                                                ? const Color(0xFF14B8A6).withValues(alpha: 0.4)
-                                                : Colors.teal.shade200,
+                                                ? const Color(0xFF2E93BD).withValues(alpha: 0.4)
+                                                : Color(0xFFB5D9E8),
                                           ),
                                         ),
                                         child: Text(
@@ -444,7 +660,7 @@ class _CatalogPreviewDialogState extends State<CatalogPreviewDialog> {
                                           style: TextStyle(
                                             fontSize: 11,
                                             fontWeight: FontWeight.bold,
-                                            color: isDark ? const Color(0xFF5EEAD4) : Colors.teal.shade800,
+                                            color: isDark ? const Color(0xFF5DB8DB) : Color(0xFF0B6A90),
                                           ),
                                         ),
                                       ),

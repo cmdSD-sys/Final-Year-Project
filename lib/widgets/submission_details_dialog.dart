@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../models/models.dart';
+import '../theme/app_theme.dart';
 
 class SubmissionDetailsDialog extends StatelessWidget {
   final MonitoringSubmission submission;
@@ -29,34 +30,25 @@ class SubmissionDetailsDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final dialogBg = isDark ? const Color(0xFF1E293B) : Colors.white;
-    final cardBg = isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC);
-    final borderColor = isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0);
-    final textColor = isDark ? Colors.white : const Color(0xFF0F172A);
-    final subtextColor = isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
+    final dialogBg = Pal.of(context).surface;
+    final cardBg = Pal.of(context).paper;
+    final borderColor = Pal.of(context).rule;
+    final textColor = Pal.of(context).ink;
+    final subtextColor = Pal.of(context).inkMuted;
 
     return AlertDialog(
       backgroundColor: dialogBg,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(10),
         side: BorderSide(color: borderColor),
       ),
       title: Row(
         children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: isDark
-                  ? const Color(0xFF2563EB).withValues(alpha: 0.2)
-                  : const Color(0xFFEFF6FF),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(
+          Icon(
               Icons.assignment_outlined,
-              color: isDark ? const Color(0xFF60A5FA) : const Color(0xFF1E3A8A),
+              color: isDark ? const Color(0xFF5DB8DB) : const Color(0xFF0B6A90),
               size: 22,
             ),
-          ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
@@ -64,11 +56,7 @@ class SubmissionDetailsDialog extends StatelessWidget {
               children: [
                 Text(
                   'Submission Details',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 18,
-                    color: textColor,
-                  ),
+                  style: AppType.display(textColor, size: 22, height: 1.2),
                 ),
                 Text(
                   'ID: ${submission.id}',
@@ -161,7 +149,7 @@ class SubmissionDetailsDialog extends StatelessWidget {
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
                     color: cardBg,
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(6),
                     border: Border.all(color: borderColor),
                   ),
                   child: Column(
@@ -172,8 +160,8 @@ class SubmissionDetailsDialog extends StatelessWidget {
                           CircleAvatar(
                             radius: 12,
                             backgroundColor: isDark
-                                ? const Color(0xFF1E3A8A)
-                                : const Color(0xFF2563EB),
+                                ? const Color(0xFF0B6A90)
+                                : const Color(0xFF1281B0),
                             child: Text(
                               '${row.srNo}',
                               style: const TextStyle(
@@ -199,13 +187,13 @@ class SubmissionDetailsDialog extends StatelessWidget {
                                 horizontal: 8, vertical: 3),
                             decoration: BoxDecoration(
                               color: isDark
-                                  ? const Color(0xFF2563EB).withValues(alpha: 0.2)
-                                  : Colors.blue.shade50,
-                              borderRadius: BorderRadius.circular(6),
+                                  ? const Color(0xFF1281B0).withValues(alpha: 0.2)
+                                  : Color(0xFFE3F0F5),
+                              borderRadius: BorderRadius.circular(4),
                               border: Border.all(
                                 color: isDark
-                                    ? const Color(0xFF3B82F6).withValues(alpha: 0.4)
-                                    : Colors.blue.shade200,
+                                    ? const Color(0xFF2E93BD).withValues(alpha: 0.4)
+                                    : Color(0xFFB5D9E8),
                               ),
                             ),
                             child: Text(
@@ -214,8 +202,8 @@ class SubmissionDetailsDialog extends StatelessWidget {
                                 fontSize: 11.5,
                                 fontWeight: FontWeight.bold,
                                 color: isDark
-                                    ? const Color(0xFF93C5FD)
-                                    : Colors.blue.shade900,
+                                    ? const Color(0xFF9BD0E6)
+                                    : Color(0xFF084E6B),
                               ),
                             ),
                           ),
@@ -232,8 +220,8 @@ class SubmissionDetailsDialog extends StatelessWidget {
                               fontSize: 13,
                               fontWeight: FontWeight.w600,
                               color: isDark
-                                  ? const Color(0xFF5EEAD4)
-                                  : const Color(0xFF0F766E),
+                                  ? const Color(0xFF5DB8DB)
+                                  : const Color(0xFF0B6A90),
                             ),
                           ),
                           Text(
@@ -288,10 +276,10 @@ class SubmissionDetailsDialog extends StatelessWidget {
         ),
         ElevatedButton.icon(
           style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFF1E3A8A),
+            backgroundColor: const Color(0xFF0B6A90),
             foregroundColor: Colors.white,
             shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(5)),
           ),
           onPressed: () {
             Navigator.pop(context);
@@ -312,10 +300,10 @@ class SubmissionDetailsDialog extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9),
-        borderRadius: BorderRadius.circular(8),
+        color: isDark ? const Color(0xFF0E222A) : const Color(0xFFE9EFF1),
+        borderRadius: BorderRadius.circular(5),
         border: Border.all(
-          color: isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1),
+          color: isDark ? const Color(0xFF2B4650) : const Color(0xFFC0CDD3),
         ),
       ),
       child: Row(
@@ -324,7 +312,7 @@ class SubmissionDetailsDialog extends StatelessWidget {
           Icon(
             icon,
             size: 15,
-            color: isDark ? const Color(0xFF60A5FA) : const Color(0xFF1E3A8A),
+            color: isDark ? const Color(0xFF5DB8DB) : const Color(0xFF0B6A90),
           ),
           const SizedBox(width: 6),
           Text(
@@ -332,7 +320,7 @@ class SubmissionDetailsDialog extends StatelessWidget {
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
-              color: isDark ? const Color(0xFFE2E8F0) : const Color(0xFF1E293B),
+              color: isDark ? const Color(0xFFD5DEE2) : const Color(0xFF14303A),
             ),
           ),
         ],
@@ -344,7 +332,7 @@ class SubmissionDetailsDialog extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0),
+        color: isDark ? const Color(0xFF14303A) : const Color(0xFFD5DEE2),
         borderRadius: BorderRadius.circular(4),
       ),
       child: Text(
@@ -352,7 +340,7 @@ class SubmissionDetailsDialog extends StatelessWidget {
         style: TextStyle(
           fontSize: 11,
           fontWeight: FontWeight.w500,
-          color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF475569),
+          color: isDark ? const Color(0xFF8FA6AF) : const Color(0xFF44575F),
         ),
       ),
     );
