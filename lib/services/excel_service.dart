@@ -407,18 +407,18 @@ class ExcelService {
 
   /// Default programs seeded in the app
   static List<ProgramInfo> getDefaultPrograms() {
-    return const [
-      ProgramInfo(code: 'CM', name: 'Computer Technology'),
-      ProgramInfo(code: 'IT', name: 'Information Technology'),
-      ProgramInfo(code: 'ME', name: 'Mechanical Engineering'),
-      ProgramInfo(code: 'CE', name: 'Civil Engineering'),
-      ProgramInfo(code: 'EE', name: 'Electrical Engineering'),
+    return [
+      const ProgramInfo(code: 'CM', name: 'Computer Technology'),
+      const ProgramInfo(code: 'IT', name: 'Information Technology'),
+      const ProgramInfo(code: 'ME', name: 'Mechanical Engineering'),
+      const ProgramInfo(code: 'CE', name: 'Civil Engineering'),
+      const ProgramInfo(code: 'EE', name: 'Electrical Engineering'),
     ];
   }
 
   /// Default faculties seeded in the app
   static List<FacultyInfo> getDefaultFaculties() {
-    return const [
+    return [
       // Computer Technology
       FacultyInfo(
         name: 'Prof. A. B. Chaudhari',
@@ -517,7 +517,7 @@ class ExcelService {
 
   /// Default courses seeded in the app
   static List<CourseInfo> getDefaultCourses() {
-    return const [
+    return [
       // CM Odd
       CourseInfo(programCode: 'CM', semester: 1, courseCodeAndAbbr: 'DCN-3111', thPrescribed: '4', prPrescribed: '2', tuPrescribed: 'NA'),
       CourseInfo(programCode: 'CM', semester: 1, courseCodeAndAbbr: 'BMS-3112', thPrescribed: '4', prPrescribed: 'NA', tuPrescribed: '2'),

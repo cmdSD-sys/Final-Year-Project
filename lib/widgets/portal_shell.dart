@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import '../services/app_state.dart';
 import '../theme/app_theme.dart';
 import 'app_navigation_drawer.dart';
-import 'palette_switcher_dialog.dart';
 import 'portal_ui.dart';
 
 /// Page frame shared by the dashboards.
@@ -32,12 +31,6 @@ class PortalShell extends StatelessWidget {
     final p = Pal.of(context);
     final wide = MediaQuery.sizeOf(context).width >= wideBreakpoint;
 
-    final paletteBtn = IconButton(
-      icon: const Icon(Icons.palette_outlined),
-      tooltip: 'Theme & Color Palette',
-      onPressed: () => PaletteSwitcherDialog.show(context, appState),
-    );
-
     if (!wide) {
       return Scaffold(
         backgroundColor: p.paper,
@@ -56,7 +49,7 @@ class PortalShell extends StatelessWidget {
             ),
           ),
           title: PortalAppBarTitle(subtitle: title),
-          actions: [...actions, paletteBtn],
+          actions: actions,
         ),
         body: body,
       );
@@ -83,7 +76,7 @@ class PortalShell extends StatelessWidget {
                   title,
                   style: AppType.display(p.ink, size: 22, height: 1.2),
                 ),
-                actions: [...actions, paletteBtn, const SizedBox(width: 24)],
+                actions: [...actions, const SizedBox(width: 24)],
               ),
               body: body,
             ),

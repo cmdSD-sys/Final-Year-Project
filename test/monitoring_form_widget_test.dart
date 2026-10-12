@@ -124,6 +124,10 @@ void main() {
       ),
     );
 
+    tester.view.physicalSize = const Size(1600, 2400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
@@ -373,7 +377,7 @@ void main() {
   testWidgets(
       'UserHomeScreen displays Export docx button and clicking it opens export options sheet',
       (WidgetTester tester) async {
-    tester.view.physicalSize = const Size(1600, 1200);
+    tester.view.physicalSize = const Size(1600, 2400);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
 

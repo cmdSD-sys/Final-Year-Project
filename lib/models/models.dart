@@ -1,3 +1,6 @@
+export 'dept_info_model.dart';
+export 'cm_sections_model.dart';
+
 class ProgramInfo {
   final String code;
   final String name;

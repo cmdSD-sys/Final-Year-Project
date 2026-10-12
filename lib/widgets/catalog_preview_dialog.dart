@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/app_state.dart';
 import '../theme/app_theme.dart';
-import '../utils/app_snack_bar.dart';
 
 class CatalogPreviewDialog extends StatefulWidget {
   final AppState appState;
@@ -28,135 +27,7 @@ class _CatalogPreviewDialogState extends State<CatalogPreviewDialog> {
     }
   }
 
-  Future<void> _handleClearFaculties() async {
-    final targetDept = _selectedFacultyDept;
-    final deptName = targetDept != null ? 'department "$targetDept"' : 'ALL departments';
 
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) {
-        final isDark = Theme.of(ctx).brightness == Brightness.dark;
-        return AlertDialog(
-          title: const Row(
-            children: [
-              Icon(Icons.warning_amber_rounded, color: Color(0xFFB3261E), size: 24),
-              SizedBox(width: 8),
-              Text(
-                'Clear Faculty Catalog?',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-            ],
-          ),
-          content: Text(
-            'Are you sure you want to permanently clear all faculties for $deptName?\n\n'
-            'This action cannot be undone. You will need to upload an updated Excel sheet to restore faculty records.',
-            style: TextStyle(
-              fontSize: 13.5,
-              color: isDark ? const Color(0xFFC0CDD3) : const Color(0xFF2B4650),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFB3261E),
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(5)),
-              ),
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Clear Faculties'),
-            ),
-          ],
-        );
-      },
-    );
-
-    if (confirmed != true) return;
-
-    try {
-      final count = await widget.appState.clearFaculties(programCode: targetDept);
-      if (!mounted) return;
-      AppSnackBar.showSuccess(
-        context,
-        'Successfully cleared $count faculties for $deptName!',
-      );
-      setState(() {});
-    } catch (e) {
-      if (!mounted) return;
-      AppSnackBar.showError(
-        context,
-        e.toString().replaceAll('ApiException: ', ''),
-      );
-    }
-  }
-
-  Future<void> _handleClearCourses() async {
-    final targetDept = _selectedCourseDept;
-    final deptName = targetDept != null ? 'department "$targetDept"' : 'ALL departments';
-
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) {
-        final isDark = Theme.of(ctx).brightness == Brightness.dark;
-        return AlertDialog(
-          title: const Row(
-            children: [
-              Icon(Icons.warning_amber_rounded, color: Color(0xFFB3261E), size: 24),
-              SizedBox(width: 8),
-              Text(
-                'Clear Course Catalog?',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-            ],
-          ),
-          content: Text(
-            'Are you sure you want to permanently clear all courses/curriculum for $deptName?\n\n'
-            'This action cannot be undone. You will need to upload an updated Excel sheet to restore curriculum subjects.',
-            style: TextStyle(
-              fontSize: 13.5,
-              color: isDark ? const Color(0xFFC0CDD3) : const Color(0xFF2B4650),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFB3261E),
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(5)),
-              ),
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Clear Courses'),
-            ),
-          ],
-        );
-      },
-    );
-
-    if (confirmed != true) return;
-
-    try {
-      final count = await widget.appState.clearCourses(programCode: targetDept);
-      if (!mounted) return;
-      AppSnackBar.showSuccess(
-        context,
-        'Successfully cleared $count courses for $deptName!',
-      );
-      setState(() {});
-    } catch (e) {
-      if (!mounted) return;
-      AppSnackBar.showError(
-        context,
-        e.toString().replaceAll('ApiException: ', ''),
-      );
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -337,28 +208,6 @@ class _CatalogPreviewDialogState extends State<CatalogPreviewDialog> {
                                 ),
                               ),
                             ),
-                            if (widget.appState.isAdminOrSuper) ...[
-                              const SizedBox(width: 8),
-                              Tooltip(
-                                message: _selectedFacultyDept != null
-                                    ? 'Clear faculties for $_selectedFacultyDept'
-                                    : 'Clear all faculties',
-                                child: OutlinedButton.icon(
-                                  style: OutlinedButton.styleFrom(
-                                    foregroundColor: const Color(0xFFB3261E),
-                                    side: const BorderSide(color: Color(0xFFC7443A)),
-                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(5)),
-                                  ),
-                                  icon: const Icon(Icons.delete_sweep, size: 16),
-                                  label: Text(
-                                    _selectedFacultyDept != null ? 'Clear ($_selectedFacultyDept)' : 'Clear All',
-                                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-                                  ),
-                                  onPressed: _handleClearFaculties,
-                                ),
-                              ),
-                            ],
                           ],
                         ),
                         const SizedBox(height: 8),
@@ -557,28 +406,6 @@ class _CatalogPreviewDialogState extends State<CatalogPreviewDialog> {
                                 ),
                               ),
                             ),
-                            if (widget.appState.isAdminOrSuper) ...[
-                              const SizedBox(width: 8),
-                              Tooltip(
-                                message: _selectedCourseDept != null
-                                    ? 'Clear courses for $_selectedCourseDept'
-                                    : 'Clear all courses',
-                                child: OutlinedButton.icon(
-                                  style: OutlinedButton.styleFrom(
-                                    foregroundColor: const Color(0xFFB3261E),
-                                    side: const BorderSide(color: Color(0xFFC7443A)),
-                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(5)),
-                                  ),
-                                  icon: const Icon(Icons.delete_sweep, size: 16),
-                                  label: Text(
-                                    _selectedCourseDept != null ? 'Clear ($_selectedCourseDept)' : 'Clear All',
-                                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-                                  ),
-                                  onPressed: _handleClearCourses,
-                                ),
-                              ),
-                            ],
                           ],
                         ),
                         const SizedBox(height: 8),

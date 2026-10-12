@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import '../models/models.dart';
+import '../router/app_router.dart';
 import '../services/app_state.dart';
 import '../services/docx_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/app_snack_bar.dart';
-import '../widgets/palette_switcher_dialog.dart';
 import '../widgets/portal_ui.dart';
 
 class MonitoringFormScreen extends StatefulWidget {
@@ -230,7 +231,14 @@ class _MonitoringFormScreenState extends State<MonitoringFormScreen> {
             ),
             onPressed: () {
               Navigator.pop(ctx); // close dialog
-              Navigator.pop(context); // back to user home
+              if (GoRouter.maybeOf(context) != null) {
+                final dest = widget.appState.isAdminOrSuper
+                    ? AppRoutes.admin
+                    : AppRoutes.user;
+                context.go(dest);
+              } else {
+                Navigator.pop(context); // back to home
+              }
             },
             child: const Text('Back to Home'),
           ),
@@ -289,17 +297,23 @@ class _MonitoringFormScreenState extends State<MonitoringFormScreen> {
         return Scaffold(
           backgroundColor: pal.paper,
           appBar: AppBar(
+            leading: IconButton(
+              icon: const Icon(Icons.arrow_back),
+              tooltip: 'Back to Dashboard',
+              onPressed: () {
+                if (GoRouter.maybeOf(context) != null) {
+                  final dest = widget.appState.isAdminOrSuper
+                      ? AppRoutes.admin
+                      : AppRoutes.user;
+                  context.go(dest);
+                } else {
+                  Navigator.maybePop(context);
+                }
+              },
+            ),
             title: const PortalAppBarTitle(
               title: 'Internal Institute Monitoring Format (IIM-26-27)',
             ),
-            actions: [
-              IconButton(
-                icon: const Icon(Icons.palette_outlined),
-                tooltip: 'Theme & Color Palette',
-                onPressed: () => PaletteSwitcherDialog.show(context, widget.appState),
-              ),
-              const SizedBox(width: 8),
-            ],
           ),
       // Save Form Button (kept in view while scrolling)
       bottomNavigationBar: Container(

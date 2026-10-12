@@ -2,7 +2,10 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import 'package:intl/intl.dart';
+import 'package:go_router/go_router.dart';
+import '../config/app_config.dart';
 import '../models/models.dart';
+import '../router/app_router.dart';
 import '../services/app_state.dart';
 import '../services/docx_service.dart';
 import '../utils/app_snack_bar.dart';
@@ -11,6 +14,7 @@ import '../widgets/catalog_preview_dialog.dart';
 import '../widgets/portal_shell.dart';
 import '../widgets/portal_ui.dart';
 import '../widgets/submission_details_dialog.dart';
+import 'dept_info_form_screen.dart';
 import 'monitoring_form_screen.dart';
 
 class UserHomeScreen extends StatefulWidget {
@@ -33,7 +37,7 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
   }
 
   Future<void> _syncWithBackend() async {
-    if (!widget.appState.isAuthenticated) return;
+    if (!widget.appState.isAuthenticated || !AppConfig.useRemoteBackend) return;
     setState(() => _isSyncing = true);
     try {
       await widget.appState.refreshCatalogFromBackend();
@@ -41,6 +45,7 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
     } catch (_) {}
     if (mounted) setState(() => _isSyncing = false);
   }
+
 
   void _showCatalogPreview() {
     showDialog(
@@ -289,12 +294,29 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
   }
 
   void _openMonitoringForm() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => MonitoringFormScreen(appState: widget.appState),
-      ),
-    );
+    if (GoRouter.maybeOf(context) != null) {
+      context.go(AppRoutes.monitoringForm);
+    } else {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => MonitoringFormScreen(appState: widget.appState),
+        ),
+      );
+    }
+  }
+
+  void _openDeptInfoForm() {
+    if (GoRouter.maybeOf(context) != null) {
+      context.go(AppRoutes.cmReport);
+    } else {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => DeptInfoFormScreen(appState: widget.appState),
+        ),
+      );
+    }
   }
 
   Widget _buildRoleTag(Pal p) {
@@ -470,15 +492,12 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
         final submissions = widget.appState.submissions;
         final p = Pal.of(context);
 
-        final facultyEntries =
-            submissions.fold<int>(0, (total, s) => total + s.rows.length);
-
         return PortalShell(
           appState: widget.appState,
           onOpenCatalog: _showCatalogPreview,
           title: 'User Dashboard',
           actions: [
-            if (widget.appState.isAuthenticated)
+            if (widget.appState.isAuthenticated && AppConfig.useRemoteBackend)
               IconButton(
                 tooltip: 'Sync with Backend',
                 icon: _isSyncing
@@ -518,34 +537,49 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
                     ),
                   ),
 
-                  const SizedBox(height: 32),
+                  const SizedBox(height: 36),
 
-                  PortalStatRow(
-                    stats: [
-                      PortalStatData(
-                        label: 'Total submissions',
-                        value: '${submissions.length}',
-                        icon: Icons.assignment_outlined,
+                  // Primary Section: MSBTE Academic Monitoring (CM Department)
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'MSBTE Academic Monitoring Report (Computer Technology - CM)',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            color: p.brand,
+                          ),
+                        ),
                       ),
-                      PortalStatData(
-                        label: 'Faculty entries',
-                        value: '$facultyEntries',
-                        icon: Icons.groups_outlined,
-                      ),
-                      PortalStatData(
-                        label: 'Programs in catalog',
-                        value: '${widget.appState.programs.length}',
-                        icon: Icons.school_outlined,
-                      ),
-                      PortalStatData(
-                        label: 'Faculty in catalog',
-                        value: '${widget.appState.faculties.length}',
-                        icon: Icons.badge_outlined,
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: p.brandDeep,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: const Text(
+                          'MSBTE CM REPORT',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
                       ),
                     ],
                   ),
+                  const SizedBox(height: 14),
+                  PortalActionPanel(
+                    title: 'CM Department Report (CM_Report.pdf) — Screen 1: Dept Information',
+                    description:
+                        'Fill and manage MSBTE CM Department Information (Screen 1 / 11). All 27 fields are injected directly into the authentic 20-page MSBTE CM_Report.pdf with pixel-perfect precision across all pages.',
+                    onTap: _openDeptInfoForm,
+                  ),
 
-                  const SizedBox(height: 44),
+                  const SizedBox(height: 36),
 
                   Text(
                     'Available Monitoring Formats',
@@ -558,7 +592,7 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
                   const SizedBox(height: 14),
                   PortalActionPanel(
                     title:
-                        'Internal Institute Monitoring Format Internal Institute Monitoring Format',
+                        'Internal Institute Monitoring Format (Legacy IIM)',
                     description:
                         'Fill monitoring data: select semester type (Even/Odd), choose program, assign faculty credentials, qualifications, approvals, and verify curriculum covered.',
                     onTap: _openMonitoringForm,

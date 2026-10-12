@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import '../services/app_state.dart';
 import '../theme/app_theme.dart';
 import '../utils/app_snack_bar.dart';
-import 'palette_switcher_dialog.dart';
 
 class SettingsDialog extends StatefulWidget {
   final AppState appState;
@@ -296,39 +295,6 @@ class _SettingsDialogState extends State<SettingsDialog> {
                     ),
                   ),
                   const SizedBox(height: 10),
-                  Material(
-                    color: dark ? const Color(0xFF0E222A) : const Color(0xFFF3F6F7),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(6),
-                      side: BorderSide(color: borderColor),
-                    ),
-                    clipBehavior: Clip.antiAlias,
-                    child: ListTile(
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-                      leading: Icon(
-                        Icons.palette_outlined,
-                        color: dark ? const Color(0xFF5DB8DB) : const Color(0xFF0B6A90),
-                      ),
-                      title: Text(
-                        'Color Palette Scheme',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 14,
-                          color: textColor,
-                        ),
-                      ),
-                      subtitle: Text(
-                        'Current: ${AppTheme.paletteList.firstWhere((p) => p.id == widget.appState.currentPalette).name}',
-                        style: TextStyle(fontSize: 12, color: subtextColor),
-                      ),
-                      trailing: const Icon(Icons.chevron_right, size: 20),
-                      onTap: () {
-                        Navigator.pop(context);
-                        PaletteSwitcherDialog.show(context, widget.appState);
-                      },
-                    ),
-                  ),
-                  const SizedBox(height: 8),
                   Material(
                     color: dark ? const Color(0xFF0E222A) : const Color(0xFFF3F6F7),
                     shape: RoundedRectangleBorder(

@@ -1,8 +1,10 @@
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import '../config/app_config.dart';
 import '../models/models.dart';
 import '../theme/app_theme.dart';
 import 'api_service.dart';
+import 'cm_report_pdf_service.dart';
 import 'excel_service.dart';
 
 enum AppRole {
@@ -15,9 +17,32 @@ enum AppRole {
 class AppState extends ChangeNotifier {
   final ApiService apiService = ApiService();
 
+  DeptInfoModel _currentDeptInfo = DeptInfoModel.defaultSample();
+  DeptInfoModel get currentDeptInfo => _currentDeptInfo;
+
+  void updateDeptInfo(DeptInfoModel newInfo) {
+    _currentDeptInfo = newInfo;
+    notifyListeners();
+  }
+
+  CmFullReportSections _cmSections = CmFullReportSections.defaultSample();
+  CmFullReportSections get cmSections => _cmSections;
+
+  void updateCmSections(CmFullReportSections newSections) {
+    _cmSections = newSections;
+    notifyListeners();
+  }
+
+  Future<Uint8List> exportCmReportPdf() async {
+    return await CmReportPdfService.generateCmReportPdf(data: _currentDeptInfo);
+  }
+
   AppRole _currentRole = AppRole.none;
   ThemeMode _themeMode = ThemeMode.light;
   AppPaletteId _currentPalette = AppPaletteId.teal;
+  final ValueNotifier<ThemeMode> themeModeNotifier = ValueNotifier(ThemeMode.light);
+  final ValueNotifier<AppPaletteId> paletteNotifier = ValueNotifier(AppPaletteId.teal);
+  final ValueNotifier<bool> authStateNotifier = ValueNotifier(false);
   List<ProgramInfo> _programs = [];
   List<FacultyInfo> _faculties = [];
   List<CourseInfo> _courses = [];
@@ -25,7 +50,7 @@ class AppState extends ChangeNotifier {
 
   AuthUser? _currentUser;
   bool _isAuthenticated = false;
-  bool _isBackendConnected = false;
+  bool _isBackendConnected = true;
   bool _isCheckingBackend = false;
 
   String _adminName = 'Administrator';
@@ -33,15 +58,36 @@ class AppState extends ChangeNotifier {
   Uint8List? _adminPfpBytes;
   Uint8List? _userPfpBytes;
 
+  // Mock in-memory users for frontend mode
+  final List<AuthUser> _mockUsers = [
+    const AuthUser(
+      id: 'admin-cm-001',
+      email: 'admin@kkwagh.edu.in',
+      fullName: 'CM Administrator',
+      role: 'ADMIN',
+      department: 'CM',
+    ),
+    const AuthUser(
+      id: 'user-cm-002',
+      email: 'user@kkwagh.edu.in',
+      fullName: 'CM Faculty Member',
+      role: 'USER',
+      department: 'CM',
+    ),
+  ];
+
   AppRole get currentRole => _currentRole;
   ThemeMode get themeMode => _themeMode;
   bool get isDarkMode => _themeMode == ThemeMode.dark;
   AppPaletteId get currentPalette => _currentPalette;
 
   List<ProgramInfo> get programs {
-    if (!isSuperAdmin && currentUserDepartment != null && currentUserDepartment!.trim().isNotEmpty) {
+    if (!isSuperAdmin &&
+        currentUserDepartment != null &&
+        currentUserDepartment!.trim().isNotEmpty) {
       final dept = currentUserDepartment!.trim().toUpperCase();
-      final filtered = _programs.where((p) => p.code.trim().toUpperCase() == dept).toList();
+      final filtered =
+          _programs.where((p) => p.code.trim().toUpperCase() == dept).toList();
       if (filtered.isNotEmpty) return List.unmodifiable(filtered);
       return List.unmodifiable([
         ProgramInfo(code: dept, name: '$dept Department'),
@@ -49,6 +95,7 @@ class AppState extends ChangeNotifier {
     }
     return List.unmodifiable(_programs);
   }
+
   List<FacultyInfo> get faculties => List.unmodifiable(_faculties);
   List<CourseInfo> get courses => List.unmodifiable(_courses);
   List<MonitoringSubmission> get submissions => List.unmodifiable(_submissions);
@@ -108,7 +155,7 @@ class AppState extends ChangeNotifier {
 
   Future<void> uploadAvatar(Uint8List imageBytes, String filename) async {
     updateCurrentUserPfp(imageBytes);
-    if (_isAuthenticated) {
+    if (AppConfig.useRemoteBackend && _isAuthenticated) {
       try {
         final photoUrl = await apiService.uploadAvatar(imageBytes, filename);
         if (_currentUser != null && photoUrl != null) {
@@ -129,13 +176,16 @@ class AppState extends ChangeNotifier {
   }
 
   void toggleTheme() {
-    _themeMode = _themeMode == ThemeMode.light ? ThemeMode.dark : ThemeMode.light;
+    _themeMode =
+        _themeMode == ThemeMode.light ? ThemeMode.dark : ThemeMode.light;
+    themeModeNotifier.value = _themeMode;
     notifyListeners();
   }
 
   void setThemeMode(ThemeMode mode) {
     if (_themeMode != mode) {
       _themeMode = mode;
+      themeModeNotifier.value = _themeMode;
       notifyListeners();
     }
   }
@@ -144,23 +194,25 @@ class AppState extends ChangeNotifier {
     if (_currentPalette != palette) {
       _currentPalette = palette;
       Pal.activePalette = palette;
+      paletteNotifier.value = palette;
       notifyListeners();
     }
   }
 
   AppState() {
-    _initDefaults();
-  }
-
-  void _initDefaults() {
-    _programs = [];
-    _faculties = [];
-    _courses = [];
-    _submissions.clear();
+    // App starts empty by default; data is loaded on demand, via Excel upload, or demo login
   }
 
   /// Check connectivity to backend API server
+  /// (Immediately succeeds in frontend mode)
   Future<bool> checkBackendConnection({bool notify = true}) async {
+    if (!AppConfig.useRemoteBackend) {
+      _isCheckingBackend = false;
+      _isBackendConnected = true;
+      if (notify) notifyListeners();
+      return true;
+    }
+
     _isCheckingBackend = true;
     if (notify) notifyListeners();
     try {
@@ -174,63 +226,87 @@ class AppState extends ChangeNotifier {
     return _isBackendConnected;
   }
 
-  /// Authenticate with backend API
+  /// Authenticate user session
+  /// Supports standalone frontend mode (instant mock) or remote REST backend
   Future<void> login(String email, String password) async {
-    final result = await apiService.login(email, password);
-    _currentUser = result['user'] as AuthUser;
+    final cleanEmail = email.trim().toLowerCase();
+
+    if (AppConfig.useRemoteBackend) {
+      // Live Backend Integration
+      final result = await apiService.login(cleanEmail, password);
+      _currentUser = result['user'] as AuthUser;
+      _isAuthenticated = true;
+      _isBackendConnected = true;
+      authStateNotifier.value = true;
+
+      if (_currentUser!.isSuperAdmin) {
+        _currentRole = AppRole.superAdmin;
+        _adminName = _currentUser!.fullName;
+      } else if (_currentUser!.isAdmin) {
+        _currentRole = AppRole.admin;
+        _adminName = _currentUser!.fullName;
+      } else {
+        _currentRole = AppRole.user;
+        _userName = _currentUser!.fullName;
+      }
+
+      notifyListeners();
+      await refreshCatalogFromBackend();
+      await refreshSubmissionsFromBackend();
+      return;
+    }
+
+    // Pure Frontend Mock Mode (Zero network lag, 100% reliable)
+    final isSuper = cleanEmail.contains('superadmin');
+    final isAd = cleanEmail.contains('admin');
+    final role = isSuper
+        ? AppRole.superAdmin
+        : (isAd ? AppRole.admin : AppRole.user);
+
+    _currentUser = AuthUser(
+      id: isAd ? 'admin-cm-001' : (isSuper ? 'super-001' : 'user-cm-002'),
+      email: cleanEmail,
+      fullName: isSuper
+          ? 'Super Administrator'
+          : (isAd ? 'CM Administrator' : 'CM Faculty Member'),
+      role: isSuper ? 'SUPER_ADMIN' : (isAd ? 'ADMIN' : 'USER'),
+      department: 'CM',
+      profilePhotoUrl: null,
+    );
+
+    _currentRole = role;
     _isAuthenticated = true;
     _isBackendConnected = true;
-
-    if (_currentUser!.isSuperAdmin) {
-      _currentRole = AppRole.superAdmin;
-      _adminName = _currentUser!.fullName;
-    } else if (_currentUser!.isAdmin) {
-      _currentRole = AppRole.admin;
+    authStateNotifier.value = true;
+    if (role == AppRole.admin || role == AppRole.superAdmin) {
       _adminName = _currentUser!.fullName;
     } else {
-      _currentRole = AppRole.user;
       _userName = _currentUser!.fullName;
     }
 
-    notifyListeners();
-
-    // Fetch initial data from backend
-    await refreshCatalogFromBackend();
-    await refreshSubmissionsFromBackend();
-  }
-
-  /// One-click quick login for testing/demo
-  Future<void> loginDemo(AppRole role, {String? customEmail, String? customPassword}) async {
-    final isOnline = await checkBackendConnection();
-    if (isOnline) {
-      final email = customEmail ??
-          (role == AppRole.superAdmin
-              ? 'superadmin@kkwagh.edu.in'
-              : (role == AppRole.admin
-                  ? 'CMadmin@kkwagh.edu.in'
-                  : 'faculty@kkwagh.edu.in'));
-      final password = customPassword ??
-          (role == AppRole.superAdmin
-              ? 'SuperAdmin@12345'
-              : (role == AppRole.admin ? 'Admin@12345' : 'Faculty@12345'));
-      try {
-        await login(email, password);
-        return;
-      } catch (_) {
-        // Fall through to offline demo mode
-      }
-    }
-
-    // Offline Demo Mode
-    _currentRole = role;
-    _isAuthenticated = false;
     loadSampleDemoData();
     notifyListeners();
   }
 
+  /// One-click quick login for testing/demo
+  Future<void> loginDemo(AppRole role,
+      {String? customEmail, String? customPassword}) async {
+    final email = customEmail ??
+        (role == AppRole.superAdmin
+            ? 'superadmin@kkwagh.edu.in'
+            : (role == AppRole.admin
+                ? 'admin@kkwagh.edu.in'
+                : 'user@kkwagh.edu.in'));
+    final password = customPassword ??
+        (role == AppRole.superAdmin
+            ? 'SuperAdmin@12345'
+            : (role == AppRole.admin ? 'Admin@12345' : 'User@12345'));
+    await login(email, password);
+  }
+
   /// Sign out and clear credentials
   Future<void> logout() async {
-    if (_isAuthenticated) {
+    if (AppConfig.useRemoteBackend && _isAuthenticated) {
       try {
         await apiService.logout();
       } catch (_) {}
@@ -238,13 +314,17 @@ class AppState extends ChangeNotifier {
     _currentUser = null;
     _isAuthenticated = false;
     _currentRole = AppRole.none;
-    _initDefaults();
+    authStateNotifier.value = false;
+    _programs = [];
+    _faculties = [];
+    _courses = [];
+    _submissions.clear();
     notifyListeners();
   }
 
   /// Sync academic programs, faculty rosters, and curriculum courses from backend
   Future<void> refreshCatalogFromBackend() async {
-    if (!_isAuthenticated) return;
+    if (!AppConfig.useRemoteBackend || !_isAuthenticated) return;
     try {
       final progs = await apiService.fetchPrograms();
       final facs = await apiService.fetchFaculties();
@@ -261,7 +341,7 @@ class AppState extends ChangeNotifier {
 
   /// Sync all submissions from backend
   Future<void> refreshSubmissionsFromBackend() async {
-    if (!_isAuthenticated) return;
+    if (!AppConfig.useRemoteBackend || !_isAuthenticated) return;
     try {
       final subs = await apiService.fetchSubmissions();
       _submissions.clear();
@@ -272,25 +352,31 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  /// Helper if user clicks 'Load Demo Data' in offline mode
+  /// Load sample catalog and subject datasets
   void loadSampleDemoData() {
-    _programs = ExcelService.getDefaultPrograms();
-    _faculties = ExcelService.getDefaultFaculties();
-    _courses = ExcelService.getDefaultCourses();
+    _programs = List.from(ExcelService.getDefaultPrograms());
+    _faculties = List.from(ExcelService.getDefaultFaculties());
+    _courses = List.from(ExcelService.getDefaultCourses());
     notifyListeners();
   }
 
   void setRole(AppRole role) {
     _currentRole = role;
+    _isAuthenticated = role != AppRole.none;
+    authStateNotifier.value = _isAuthenticated;
     notifyListeners();
   }
 
   List<FacultyInfo> getFacultiesForProgram(String programCode) {
     final cleanCode = programCode.trim().toUpperCase();
     if (cleanCode.isEmpty) {
-      if (!isSuperAdmin && currentUserDepartment != null && currentUserDepartment!.isNotEmpty) {
+      if (!isSuperAdmin &&
+          currentUserDepartment != null &&
+          currentUserDepartment!.isNotEmpty) {
         final dept = currentUserDepartment!.trim().toUpperCase();
-        return _faculties.where((f) => f.programCode.trim().toUpperCase() == dept).toList();
+        return _faculties
+            .where((f) => f.programCode.trim().toUpperCase() == dept)
+            .toList();
       }
       return _faculties;
     }
@@ -301,7 +387,8 @@ class AppState extends ChangeNotifier {
 
     return _faculties.where((f) {
       final facDept = f.programCode.trim().toUpperCase();
-      return facDept == cleanCode || (cleanCode.isNotEmpty && facDept.contains(cleanCode));
+      return facDept == cleanCode ||
+          (cleanCode.isNotEmpty && facDept.contains(cleanCode));
     }).toList();
   }
 
@@ -314,9 +401,10 @@ class AppState extends ChangeNotifier {
         .toList();
   }
 
-  /// Save submission to backend or locally
-  Future<MonitoringSubmission> saveSubmission(MonitoringSubmission submission) async {
-    if (_isAuthenticated) {
+  /// Save submission to backend or local memory
+  Future<MonitoringSubmission> saveSubmission(
+      MonitoringSubmission submission) async {
+    if (AppConfig.useRemoteBackend && _isAuthenticated) {
       try {
         final created = await apiService.createSubmission(submission);
         _submissions.insert(0, created);
@@ -337,7 +425,7 @@ class AppState extends ChangeNotifier {
 
   /// Delete submission from backend and local list
   Future<void> deleteSubmission(String id) async {
-    if (_isAuthenticated) {
+    if (AppConfig.useRemoteBackend && _isAuthenticated) {
       try {
         await apiService.deleteSubmission(id);
       } catch (e) {
@@ -348,15 +436,18 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Upload Faculty Excel to backend (or parse locally if offline)
-  Future<Map<String, dynamic>> uploadFacultyExcel(Uint8List bytes, String filename) async {
+  /// Upload Faculty Excel to backend (or parse locally if in frontend mode)
+  Future<Map<String, dynamic>> uploadFacultyExcel(
+      Uint8List bytes, String filename) async {
     final forcedDept = isSuperAdmin ? null : currentUserDepartment;
-    if (_isAuthenticated) {
-      final res = await apiService.uploadFacultyExcel(bytes, filename, department: forcedDept);
+    if (AppConfig.useRemoteBackend && _isAuthenticated) {
+      final res = await apiService.uploadFacultyExcel(bytes, filename,
+          department: forcedDept);
       await refreshCatalogFromBackend();
       return res;
     } else {
-      final parseResult = ExcelService.parseFacultySheet(bytes, forcedDepartment: forcedDept);
+      final parseResult =
+          ExcelService.parseFacultySheet(bytes, forcedDepartment: forcedDept);
       if (parseResult.error != null) {
         throw Exception(parseResult.error);
       }
@@ -368,15 +459,18 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  /// Upload Subject Excel to backend (or parse locally if offline)
-  Future<Map<String, dynamic>> uploadCourseExcel(Uint8List bytes, String filename) async {
+  /// Upload Subject Excel to backend (or parse locally if in frontend mode)
+  Future<Map<String, dynamic>> uploadCourseExcel(
+      Uint8List bytes, String filename) async {
     final forcedDept = isSuperAdmin ? null : currentUserDepartment;
-    if (_isAuthenticated) {
-      final res = await apiService.uploadCourseExcel(bytes, filename, department: forcedDept);
+    if (AppConfig.useRemoteBackend && _isAuthenticated) {
+      final res = await apiService.uploadCourseExcel(bytes, filename,
+          department: forcedDept);
       await refreshCatalogFromBackend();
       return res;
     } else {
-      final courses = ExcelService.parseSubjectSheet(bytes, forcedDepartment: forcedDept);
+      final courses =
+          ExcelService.parseSubjectSheet(bytes, forcedDepartment: forcedDept);
       if (courses.isEmpty) {
         throw Exception('No courses found in the uploaded sheet.');
       }
@@ -385,7 +479,7 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  /// Create user via backend API
+  /// Create user via backend API or local state
   Future<AuthUser> createUser({
     required String fullName,
     required String email,
@@ -393,16 +487,28 @@ class AppState extends ChangeNotifier {
     required String role,
     String? department,
   }) async {
-    return await apiService.createUser(
-      fullName: fullName,
-      email: email,
-      password: password,
-      role: role,
-      department: department,
+    if (AppConfig.useRemoteBackend && _isAuthenticated) {
+      return await apiService.createUser(
+        fullName: fullName,
+        email: email,
+        password: password,
+        role: role,
+        department: department,
+      );
+    }
+    final newUser = AuthUser(
+      id: 'user-${DateTime.now().millisecondsSinceEpoch}',
+      email: email.trim().toLowerCase(),
+      fullName: fullName.trim(),
+      role: role.toUpperCase(),
+      department: department ?? 'CM',
     );
+    _mockUsers.add(newUser);
+    notifyListeners();
+    return newUser;
   }
 
-  /// Fetch users from backend (Admin / Super Admin)
+  /// Fetch users from backend or local mock list
   Future<List<AuthUser>> fetchUsers({
     String? search,
     String? role,
@@ -410,36 +516,104 @@ class AppState extends ChangeNotifier {
     int page = 1,
     int limit = 100,
   }) async {
-    return await apiService.fetchUsers(
-      search: search,
-      role: role,
-      department: department,
-      page: page,
-      limit: limit,
-    );
+    if (AppConfig.useRemoteBackend && _isAuthenticated) {
+      return await apiService.fetchUsers(
+        search: search,
+        role: role,
+        department: department,
+        page: page,
+        limit: limit,
+      );
+    }
+    var list = List<AuthUser>.from(_mockUsers);
+    if (search != null && search.isNotEmpty) {
+      final s = search.toLowerCase();
+      list = list
+          .where((u) =>
+              u.fullName.toLowerCase().contains(s) ||
+              u.email.toLowerCase().contains(s))
+          .toList();
+    }
+    if (role != null && role.isNotEmpty) {
+      list = list.where((u) => u.role.toUpperCase() == role.toUpperCase()).toList();
+    }
+    return list;
   }
 
   /// Change user role (Super Admin only: USER <-> ADMIN)
   Future<AuthUser> changeUserRole(String userId, String newRole) async {
-    return await apiService.changeUserRole(userId, newRole);
+    if (AppConfig.useRemoteBackend && _isAuthenticated) {
+      return await apiService.changeUserRole(userId, newRole);
+    }
+    final idx = _mockUsers.indexWhere((u) => u.id == userId);
+    if (idx != -1) {
+      final old = _mockUsers[idx];
+      final updated = AuthUser(
+        id: old.id,
+        email: old.email,
+        fullName: old.fullName,
+        role: newRole.toUpperCase(),
+        department: old.department,
+        profilePhotoUrl: old.profilePhotoUrl,
+      );
+      _mockUsers[idx] = updated;
+      notifyListeners();
+      return updated;
+    }
+    throw Exception('User not found.');
   }
 
-  /// Delete a user account permanently (Super Admin or Dept Admin)
+  /// Delete a user account permanently
   Future<bool> deleteUser(String userId) async {
-    return await apiService.deleteUser(userId);
+    if (AppConfig.useRemoteBackend && _isAuthenticated) {
+      return await apiService.deleteUser(userId);
+    }
+    _mockUsers.removeWhere((u) => u.id == userId);
+    notifyListeners();
+    return true;
   }
 
   /// Clear faculties individually (optionally filtered by department)
   Future<int> clearFaculties({String? programCode}) async {
-    final count = await apiService.clearFaculties(programCode: programCode);
-    await refreshCatalogFromBackend();
+    if (AppConfig.useRemoteBackend && _isAuthenticated) {
+      final count = await apiService.clearFaculties(programCode: programCode);
+      await refreshCatalogFromBackend();
+      return count;
+    }
+    int count = _faculties.length;
+    if (programCode != null && programCode.isNotEmpty) {
+      final before = _faculties.length;
+      _faculties = _faculties
+          .where((f) =>
+              f.programCode.toUpperCase() != programCode.toUpperCase())
+          .toList();
+      count = before - _faculties.length;
+    } else {
+      _faculties = [];
+    }
+    notifyListeners();
     return count;
   }
 
   /// Clear courses individually (optionally filtered by department)
   Future<int> clearCourses({String? programCode}) async {
-    final count = await apiService.clearCourses(programCode: programCode);
-    await refreshCatalogFromBackend();
+    if (AppConfig.useRemoteBackend && _isAuthenticated) {
+      final count = await apiService.clearCourses(programCode: programCode);
+      await refreshCatalogFromBackend();
+      return count;
+    }
+    int count = _courses.length;
+    if (programCode != null && programCode.isNotEmpty) {
+      final before = _courses.length;
+      _courses = _courses
+          .where(
+              (c) => c.programCode.toUpperCase() != programCode.toUpperCase())
+          .toList();
+      count = before - _courses.length;
+    } else {
+      _courses = [];
+    }
+    notifyListeners();
     return count;
   }
 
@@ -469,7 +643,6 @@ class AppState extends ChangeNotifier {
   }
 
   void resetToDefaultData() {
-    _initDefaults();
-    notifyListeners();
+    loadSampleDemoData();
   }
 }

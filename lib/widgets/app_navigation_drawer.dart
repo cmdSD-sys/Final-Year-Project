@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+import '../router/app_router.dart';
 import '../services/app_state.dart';
 import '../screens/role_selection_screen.dart';
 import '../theme/app_theme.dart';
 import 'create_user_dialog.dart';
 import 'excel_upload_dialog.dart';
 import 'portal_ui.dart';
-import 'palette_switcher_dialog.dart';
 import 'settings_dialog.dart';
 import 'super_admin_user_dialog.dart';
 
@@ -25,7 +26,7 @@ class AppNavigationDrawer extends StatelessWidget {
   });
 
   void _dismiss(BuildContext context) {
-    if (!persistent) {
+    if (!persistent && Navigator.canPop(context)) {
       Navigator.pop(context);
     }
   }
@@ -269,15 +270,6 @@ class AppNavigationDrawer extends StatelessWidget {
                       },
                     ),
                   navTile(
-                    icon: Icons.palette_outlined,
-                    title: 'Theme & Color Palette',
-                    subtitle: 'Choose from 6 college color schemes',
-                    onTap: () {
-                      _dismiss(context);
-                      PaletteSwitcherDialog.show(context, appState);
-                    },
-                  ),
-                  navTile(
                     icon: Icons.settings,
                     title: 'Settings',
                     subtitle: 'Theme mode and system preferences',
@@ -311,13 +303,21 @@ class AppNavigationDrawer extends StatelessWidget {
                     style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
                   ),
                   onPressed: () async {
+                    final router = GoRouter.maybeOf(context);
+                    _dismiss(context);
                     await appState.logout();
-                    if (!context.mounted) return;
-                    Navigator.pushAndRemoveUntil(
-                      context,
-                      MaterialPageRoute(builder: (_) => RoleSelectionScreen(appState: appState)),
-                      (route) => false,
-                    );
+                    if (router != null) {
+                      router.go(AppRoutes.login);
+                    } else if (context.mounted) {
+                      Navigator.pushAndRemoveUntil(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) =>
+                              RoleSelectionScreen(appState: appState),
+                        ),
+                        (route) => false,
+                      );
+                    }
                   },
                 ),
               ),

@@ -196,10 +196,10 @@ void main() {
     // Verify Super Admin Dialog elements
     expect(find.text('Super Admin View'), findsOneWidget);
     expect(find.text('All Depts'), findsOneWidget);
-    expect(find.text('CM'), findsOneWidget);
-    expect(find.text('IT'), findsOneWidget);
-    expect(find.text('ME'), findsOneWidget);
-    expect(find.text('CE'), findsOneWidget);
+    expect(find.widgetWithText(ChoiceChip, 'CM'), findsOneWidget);
+    expect(find.widgetWithText(ChoiceChip, 'IT'), findsOneWidget);
+    expect(find.widgetWithText(ChoiceChip, 'ME'), findsOneWidget);
+    expect(find.widgetWithText(ChoiceChip, 'CE'), findsOneWidget);
   });
 
   testWidgets('CatalogPreviewDialog renders Clear Faculties and Clear Courses buttons for Admin',
@@ -230,16 +230,14 @@ void main() {
     await tester.tap(find.text('Open Catalog'));
     await tester.pumpAndSettle();
 
-    // Verify Tab 1 (Faculties) shows Clear All
-    expect(find.text('Clear All'), findsOneWidget);
-    expect(find.byIcon(Icons.delete_sweep), findsOneWidget);
+    // Verify Tab 1 (Faculties) does NOT show Clear All
+    expect(find.text('Clear All'), findsNothing);
 
     // Switch to Tab 2 (Subjects & Semesters)
     await tester.tap(find.text('Subjects & Semesters'));
     await tester.pumpAndSettle();
 
-    // Verify Tab 2 (Courses) shows Clear All
-    expect(find.text('Clear All'), findsOneWidget);
-    expect(find.byIcon(Icons.delete_sweep), findsOneWidget);
+    // Verify Tab 2 (Courses) does NOT show Clear All
+    expect(find.text('Clear All'), findsNothing);
   });
 }

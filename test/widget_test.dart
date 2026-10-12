@@ -10,7 +10,7 @@ void main() {
 
     // Verify title and institutional login options
     expect(find.text('K K Wagh Polytechnic, Nashik'), findsOneWidget);
-    expect(find.text('Super Admin (All Departments)'), findsOneWidget);
-    expect(find.text('CM Admin (Comp)'), findsOneWidget);
+    expect(find.text('Admin (CM Department)'), findsWidgets);
+    expect(find.text('User (CM Department)'), findsWidgets);
   });
 }

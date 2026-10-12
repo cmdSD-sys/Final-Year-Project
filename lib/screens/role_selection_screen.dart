@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+import '../config/app_config.dart';
+import '../router/app_router.dart';
 import '../services/app_state.dart';
 import '../utils/app_snack_bar.dart';
 import '../theme/app_theme.dart';
-import '../widgets/palette_switcher_dialog.dart';
 import '../widgets/portal_ui.dart';
 import 'admin_dashboard_screen.dart';
 import 'user_home_screen.dart';
@@ -23,8 +25,6 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
 
   bool _obscurePassword = true;
   bool _isLoading = false;
-  AppRole _selectedRole = AppRole.user;
-  bool _showOfflineBypass = true;
 
   @override
   void initState() {
@@ -78,28 +78,13 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
     setState(() => _isLoading = true);
 
     try {
-      final isOnline = await widget.appState.checkBackendConnection();
-      if (isOnline) {
-        await widget.appState.login(email, password);
-        if (!mounted) return;
-        AppSnackBar.showSuccess(
-          context,
-          'Signed in as ${widget.appState.currentUserName}!',
-        );
-        _navigateToDashboard();
-      } else {
-        // Backend offline: use offline demo mode
-        final isSuper = email.toLowerCase().contains('superadmin');
-        final isAd = email.toLowerCase().contains('admin');
-        final role = isSuper ? AppRole.superAdmin : (isAd ? AppRole.admin : AppRole.user);
-        widget.appState.loginDemo(role, customEmail: email, customPassword: password);
-        if (!mounted) return;
-        AppSnackBar.showInfo(
-          context,
-          'Backend offline — entered Demo Mode (${isSuper ? 'Super Admin' : (isAd ? 'Admin' : 'Faculty')}).',
-        );
-        _navigateToDashboard();
-      }
+      await widget.appState.login(email, password);
+      if (!mounted) return;
+      AppSnackBar.showSuccess(
+        context,
+        'Signed in as ${widget.appState.currentUserName}!',
+      );
+      _navigateToDashboard();
     } catch (e) {
       if (!mounted) return;
       AppSnackBar.showError(context, 'Login failed: $e');
@@ -109,6 +94,15 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
   }
 
   void _navigateToDashboard() {
+    try {
+      if (GoRouter.maybeOf(context) != null) {
+        context.go(widget.appState.isAdminOrSuper
+            ? AppRoutes.admin
+            : AppRoutes.user);
+        return;
+      }
+    } catch (_) {}
+
     if (widget.appState.isAdminOrSuper) {
       Navigator.pushReplacement(
         context,
@@ -124,12 +118,6 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
         ),
       );
     }
-  }
-
-  void _handleOfflineEntry() {
-    widget.appState.setRole(_selectedRole);
-    widget.appState.loadSampleDemoData();
-    _navigateToDashboard();
   }
 
   Widget _buildBrandPanel(Pal p, {required bool wide}) {
@@ -186,66 +174,64 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
   }
 
   Widget _buildConnectionStatus(Pal p) {
+    if (!AppConfig.useRemoteBackend) {
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(
+              color: p.success,
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            'Frontend Standalone • Mock Ready',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+              color: p.inkSoft,
+            ),
+          ),
+        ],
+      );
+    }
+
     final isBackendOnline = widget.appState.isBackendConnected;
     final isChecking = widget.appState.isCheckingBackend;
     return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      mainAxisSize: MainAxisSize.min,
       children: [
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 8,
-              height: 8,
-              decoration: BoxDecoration(
-                color: isBackendOnline ? p.success : p.ochre,
-                shape: BoxShape.circle,
-              ),
-            ),
-            const SizedBox(width: 6),
-            Text(
-              isChecking
-                  ? 'Checking...'
-                  : isBackendOnline
-                      ? 'API Online'
-                      : 'Demo Mode',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-                color: p.inkSoft,
-              ),
-            ),
-            const SizedBox(width: 4),
-            InkWell(
-              onTap: () => widget.appState.checkBackendConnection(),
-              borderRadius: BorderRadius.circular(12),
-              child: Padding(
-                padding: const EdgeInsets.all(3),
-                child: Icon(Icons.refresh, size: 14, color: p.inkMuted),
-              ),
-            ),
-          ],
+        Container(
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(
+            color: isBackendOnline ? p.success : p.ochre,
+            shape: BoxShape.circle,
+          ),
         ),
+        const SizedBox(width: 6),
+        Text(
+          isChecking
+              ? 'Checking...'
+              : isBackendOnline
+                  ? 'API Online'
+                  : 'API Offline',
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w500,
+            color: p.inkSoft,
+          ),
+        ),
+        const SizedBox(width: 4),
         InkWell(
-          onTap: () => PaletteSwitcherDialog.show(context, widget.appState),
-          borderRadius: BorderRadius.circular(4),
+          onTap: () => widget.appState.checkBackendConnection(),
+          borderRadius: BorderRadius.circular(12),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.palette_outlined, size: 15, color: p.brand),
-                const SizedBox(width: 4),
-                Text(
-                  'Theme',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: p.brand,
-                  ),
-                ),
-              ],
-            ),
+            padding: const EdgeInsets.all(3),
+            child: Icon(Icons.refresh, size: 14, color: p.inkMuted),
           ),
         ),
       ],
@@ -372,11 +358,11 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
 
         const SizedBox(height: 36),
 
-        // Quick demo access
+        // Quick access
         Row(
           children: [
             Text(
-              'Quick demo access',
+              'Quick Access',
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
@@ -387,180 +373,32 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
             Expanded(child: Divider(height: 1, color: p.rule)),
           ],
         ),
-        const SizedBox(height: 14),
-        SizedBox(
-          width: double.infinity,
-          child: _demoButton(
-            p,
-            label: 'Super Admin (All Departments)',
-            email: 'superadmin@kkwagh.edu.in',
-            password: 'SuperAdmin@12345',
-            icon: Icons.stars,
-            iconColor: p.plum,
-          ),
-        ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 12),
         Row(
           children: [
             Expanded(
               child: _demoButton(
                 p,
-                label: 'CM Admin (Comp)',
-                email: 'cmadmin@kkwagh.edu.in',
+                label: 'Admin (CM Department)',
+                email: 'admin@kkwagh.edu.in',
                 password: 'Admin@12345',
+                icon: Icons.admin_panel_settings,
+                iconColor: p.brand,
               ),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: 10),
             Expanded(
               child: _demoButton(
                 p,
-                label: 'IT Admin (IT)',
-                email: 'itadmin@kkwagh.edu.in',
-                password: 'Admin@12345',
+                label: 'User (CM Department)',
+                email: 'user@kkwagh.edu.in',
+                password: 'User@12345',
+                icon: Icons.person,
+                iconColor: p.inkSoft,
               ),
             ),
           ],
         ),
-        const SizedBox(height: 8),
-        Row(
-          children: [
-            Expanded(
-              child: _demoButton(
-                p,
-                label: 'ME Admin (Mech)',
-                email: 'meadmin@kkwagh.edu.in',
-                password: 'Admin@12345',
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: _demoButton(
-                p,
-                label: 'CE Admin (Civil)',
-                email: 'ceadmin@kkwagh.edu.in',
-                password: 'Admin@12345',
-              ),
-            ),
-          ],
-        ),
-
-        const SizedBox(height: 24),
-
-        // Expandable offline mode bypass
-        InkWell(
-          onTap: () => setState(() => _showOfflineBypass = !_showOfflineBypass),
-          borderRadius: BorderRadius.circular(4),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 6),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  _showOfflineBypass
-                      ? Icons.keyboard_arrow_up
-                      : Icons.keyboard_arrow_down,
-                  size: 18,
-                  color: p.inkMuted,
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  _showOfflineBypass
-                      ? 'Hide Offline Mode'
-                      : 'Offline / Standalone Mode',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: p.inkSoft,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-
-        if (_showOfflineBypass) ...[
-          const SizedBox(height: 12),
-          PortalPanel(
-            color: p.surfaceAlt,
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Continue without backend:',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: p.inkSoft,
-                  ),
-                ),
-                const SizedBox(height: 10),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(5),
-                    border: Border.all(color: p.ruleStrong),
-                    color: p.surface,
-                  ),
-                  child: DropdownButtonHideUnderline(
-                    child: DropdownButton<AppRole>(
-                      value: _selectedRole,
-                      isExpanded: true,
-                      dropdownColor: p.surface,
-                      onChanged: (AppRole? newRole) {
-                        if (newRole != null) {
-                          setState(() => _selectedRole = newRole);
-                        }
-                      },
-                      items: const [
-                        DropdownMenuItem(
-                          value: AppRole.user,
-                          child: Text(
-                            'User (Faculty / Staff Entry)',
-                            style: TextStyle(fontSize: 13.5),
-                          ),
-                        ),
-                        DropdownMenuItem(
-                          value: AppRole.admin,
-                          child: Text(
-                            'Admin (Department Admin)',
-                            style: TextStyle(fontSize: 13.5),
-                          ),
-                        ),
-                        DropdownMenuItem(
-                          value: AppRole.superAdmin,
-                          child: Text(
-                            'Super Admin (All Departments)',
-                            style: TextStyle(fontSize: 13.5),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                SizedBox(
-                  width: double.infinity,
-                  height: 44,
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: p.ink,
-                      foregroundColor: p.isDark ? p.paper : Colors.white,
-                    ),
-                    onPressed: _handleOfflineEntry,
-                    child: const Text(
-                      'Enter Portal',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
       ],
     );
   }
